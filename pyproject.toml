@@ -1,0 +1,101 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.sdist]
+exclude = [".direnv"]
+
+[tool.setuptools_scm]
+write_to = "_version.py"
+
+[project]
+name = "tcboard"
+version = "0.1.0"
+authors = [{ name = "martin f. krafft", email = "tcboard@pobox.madduck.net" }]
+description = "Server to collect and provide tournament data"
+readme = "README.md"
+requires-python = ">=3.13"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+dependencies = [
+  "tptools @ https://github.com/madduck/tptools/archive/refs/heads/main.zip",
+  "pydantic",
+  "uvloop; sys_platform == 'linux'",
+  "click",
+  "click-extra (> 7)",
+  "click-async-plugins @ https://github.com/madduck/click-async-plugins/archive/refs/heads/main.zip",
+  "fastapi",
+  "uvicorn",
+  "aiomqtt",
+  "aiosqlite",
+  "aiostream",
+  "tabulate",
+]
+
+[project.optional-dependencies]
+dev = [
+  "fastapi[standard]",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-ruff",
+  "click-extra[pytest]",
+  "ipdb",
+  "mypy",
+  "ruff",
+  "pre-commit",
+  "coverage",
+  "pytest-cov",
+]
+
+[project.scripts]
+tcboard = "tcboard.cli.main:tcboard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "integration"]
+addopts = """
+  -ra
+  --pdbcls=IPython.terminal.debugger:TerminalPdb
+  --cov=tcboard --cov-report term-missing:skip-covered --no-cov-on-fail
+  --ruff --ruff-format --ruff-config 'lint.ignore = ["I001", "F401", "F841"]'
+"""
+asyncio_default_fixture_loop_scope = "function"
+log_level = "WARNING"
+log_format = "%(name)s %(levelname)s %(message)s"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["B", "C", "E", "F", "I", "W", "B9"]
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = "ipdb"
+ignore_missing_imports = true
+
+[tool.coverage.report]
+exclude_also = [
+  'def __repr__',
+  'if TYPE_CHECKING:',
+  'class .*\bProtocol\):',
+  '@overload',
+  '@(abc\.)?abstractmethod',
+  'raise NotImplementedError',
+  'raise AssertionError',
+]
+
+[tool.coverage.run]
+omit = [
+  "tcboard/cli/debug.py",
+  "tcboard/cli/main.py",
+]
