@@ -1,0 +1,26 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic
+          - click
+          - click_extra (>= 7)
+          - fastapi
+          - starlette
+          - pytest
+          - pytest-asyncio
+          - tptools @ https://github.com/madduck/tptools/archive/refs/heads/main.zip
+          - click-async-plugins @ https://github.com/madduck/click-async-plugins/archive/refs/heads/main.zip
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.10
+    hooks:
+      - id: ruff-check
+        args: [--show-fixes]
+      - id: ruff-format
+        args: [--diff]
+
+fail_fast: true
