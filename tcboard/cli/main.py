@@ -1,0 +1,202 @@
+import asyncio
+import importlib
+import importlib.resources
+import logging
+import pathlib
+from contextlib import AsyncExitStack
+from typing import Never
+
+import click
+import click_extra as clickx
+import uvicorn
+from click_async_plugins import (
+    ITC,
+    PluginFactory,
+    create_plugin_task,
+    plugin_group,
+    setup_plugins,
+)
+from fastapi import FastAPI, Request
+from fastapi.responses import (
+    FileResponse,
+    PlainTextResponse,
+)
+from starlette.types import StatefulLifespan, StatelessLifespan
+from tptools.util import silence_logger
+
+from .util import CliContext, pass_clictx
+
+PLUGINS = []
+
+PLUGINS = ["debug"]
+try:
+    from uvloop import new_event_loop
+
+except ImportError:
+    from asyncio import new_event_loop  # type: ignore[assignment]
+
+logger = clickx.new_extra_logger(
+    format="{asctime} {name} {levelname} {message} ({filename}:{lineno})",
+    datefmt="%F %T",
+    level=logging.WARNING,
+)
+
+
+def _pong(request: Request) -> str:
+    client = request.headers.get(
+        "X-Forwarded-For", request.client.host if request.client else None
+    )
+    return f"Hello {client}, tcboard is running!\n"
+
+
+def _favicon() -> FileResponse:
+    with importlib.resources.path("tcboard", "assets", "favicon.ico") as favicon:
+        return FileResponse(
+            favicon,
+            media_type="image/png",
+        )
+
+
+def _robotstxt() -> str:
+    return "User-agent: *\nDisallow: /\n"
+
+
+def make_app(
+    lifespan: StatelessLifespan[FastAPI] | StatefulLifespan[FastAPI] | None = None,
+    *,
+    app_class: type[FastAPI] = FastAPI,
+) -> FastAPI:
+    app = app_class(lifespan=lifespan)
+
+    app.get("/", response_class=PlainTextResponse, name="root")(_pong)
+    app.get("/favicon.ico", response_class=FileResponse)(_favicon)
+    app.get("/robots.txt", response_class=PlainTextResponse)(_robotstxt)
+
+    return app
+
+
+boardlogger = logging.getLogger(__name__ + ".board")
+
+
+@plugin_group
+@clickx.config_option(  # type: ignore[untyped-decorator]
+    strict=True,
+    show_default=True,
+    file_format_patterns=clickx.ConfigFormat.TOML,
+    default=pathlib.Path(click.get_app_dir("tcboard")) / "cfg.toml",
+)
+@clickx.verbose_option(default_logger=logger)  # type: ignore[untyped-decorator]
+@click.option("--very-debug", is_flag=True, help="Do not silence any debug logging")
+@click.option(
+    "--host",
+    "-h",
+    metavar="IP",
+    default="0.0.0.0",
+    show_default=True,
+    help="Host to listen on (bind to)",
+)
+@click.option(
+    "--port",
+    "-p",
+    metavar="PORT",
+    type=click.IntRange(min=1024, max=65535),
+    default=8001,
+    show_default=True,
+    help="Port to listen on",
+)
+@click.pass_context
+def tcboard(
+    ctx: click.Context,
+    very_debug: bool,
+    host: str,
+    port: int,
+) -> None:
+    """Collect tournament data and distribute to subscribers"""
+
+    if not very_debug:
+        for name, level in (
+            ("asyncio", logging.WARNING),
+            ("click_extra", logging.INFO),
+        ):
+            silence_logger(name, level=level)
+
+    # the options will be used in the result_callback function down below
+    _ = host, port
+    itc = ITC()
+
+    app = make_app()
+
+    ctx.obj = CliContext(api=app, itc=itc)
+    app.state.clictx = ctx.obj
+
+
+for plugin in PLUGINS:
+    try:
+        mod = importlib.import_module(f".{plugin}", __package__)
+
+    except (ImportError, NotImplementedError) as exc:
+        logger.warning(f"Plugin '{plugin}' cannot be loaded: {exc}")
+
+    else:
+        subcmd = getattr(mod, plugin)
+        tcboard.add_command(subcmd)
+        logger.debug(f"Added plugin to tpsrv: {plugin}")
+
+
+@tcboard.result_callback()
+@pass_clictx
+def runit(
+    clictx: CliContext,
+    plugin_factories: list[PluginFactory],
+    very_debug: bool,
+    host: str,
+    port: int,
+) -> Never:
+    _ = very_debug
+
+    loop = new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    config = uvicorn.Config(clictx.api, host=host, port=port)
+    server = uvicorn.Server(config)
+
+    # We do not use FastAPI's/Starlette's lifespan because of
+    # https://github.com/fastapi/fastapi/discussions/13878
+    # but handle the lifespan ourselves outside of the server process:
+    async def lifespan(plugin_factories: list[PluginFactory]) -> None:
+        async with AsyncExitStack() as stack:
+            tasks = await setup_plugins(plugin_factories, stack=stack)
+
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    for task in tasks:
+                        create_plugin_task(task, create_task_fn=tg.create_task)
+
+                    try:
+                        await server.serve()
+
+                    except KeyboardInterrupt:
+                        pass
+
+                    raise asyncio.CancelledError
+
+            except asyncio.CancelledError:
+                logger.info("Exiting…")
+
+    try:
+        loop.run_until_complete(lifespan(plugin_factories))
+
+    except* click.ClickException as exc:
+        for e in exc.exceptions:
+            raise e from exc
+
+    except* Exception:
+        import ipdb
+
+        logger.exception("Something went really wrong")
+
+        ipdb.set_trace()  # noqa: E402 E702 I001 # fmt: skip
+
+        click.get_current_context().exit(1)
+
+    click.get_current_context().exit(0)
