@@ -43,6 +43,7 @@ dependencies = [
 dev = [
   "fastapi[standard]",
   "pytest",
+  "pytest-mock",
   "pytest-asyncio",
   "pytest-ruff",
   "click-extra[pytest]",

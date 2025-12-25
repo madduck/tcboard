@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, cast
 
 import pytest
@@ -11,6 +11,11 @@ from tcboard.devinfo import DeviceInfo
 from tcboard.game import Game
 from tcboard.livedata import LiveData
 from tcboard.livestatus import LiveStatus
+
+
+@pytest.fixture
+def now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 @pytest.fixture
