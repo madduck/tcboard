@@ -36,11 +36,6 @@ def alert() -> Alert:
     )
 
 
-@pytest.fixture
-def deviceinfo() -> DeviceInfo:
-    return DeviceInfo(deviceid="deviceid")
-
-
 class FakeLiveData(LiveData):
     fakedata: dict[str, Any] = {}
 
@@ -182,3 +177,8 @@ def MatchFactory(
 @pytest.fixture
 def match(MatchFactory: MatchFactoryType) -> TCMatch:
     return MatchFactory()
+
+
+@pytest.fixture
+def deviceinfo() -> DeviceInfo:
+    return DeviceInfo(deviceid="deviceid")
