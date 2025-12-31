@@ -1,8 +1,9 @@
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 
 import pytest
+import pytest_asyncio
 from pydantic import computed_field
 from tptools import (
     Court,
@@ -17,6 +18,7 @@ from tptools import (
 )
 
 from tcboard.alert import Alert
+from tcboard.dbmanager import DBManager
 from tcboard.devinfo import DeviceInfo
 from tcboard.game import Game
 from tcboard.livedata import LiveData
@@ -182,3 +184,15 @@ def match(MatchFactory: MatchFactoryType) -> TCMatch:
 @pytest.fixture
 def deviceinfo() -> DeviceInfo:
     return DeviceInfo(deviceid="deviceid")
+
+
+@pytest_asyncio.fixture
+async def dbmanager() -> AsyncGenerator[DBManager]:
+    async with DBManager(file=None) as db:
+        yield db
+
+
+@pytest_asyncio.fixture
+async def dbmanager_inited(dbmanager: DBManager) -> AsyncGenerator[DBManager]:
+    await dbmanager.init_tables()
+    yield dbmanager
