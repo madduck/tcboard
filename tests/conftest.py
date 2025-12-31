@@ -1,16 +1,32 @@
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, cast
 
 import pytest
 from pydantic import computed_field
-from tptools.util import ScoresType
+from tptools import (
+    Court,
+    Draw,
+    DrawType,
+    Entry,
+    Event,
+    MatchStatus,
+    Player,
+    ScoresType,
+    Stage,
+)
 
 from tcboard.alert import Alert
 from tcboard.devinfo import DeviceInfo
 from tcboard.game import Game
 from tcboard.livedata import LiveData
 from tcboard.livestatus import LiveStatus
+from tcboard.match import TCMatch
+
+
+@pytest.fixture
+def now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 @pytest.fixture
@@ -90,3 +106,79 @@ def FakeLiveDataFactory() -> FakeLiveDataFactoryType:
 @pytest.fixture
 def livedata(FakeLiveDataFactory: FakeLiveDataFactoryType) -> LiveData:
     return FakeLiveDataFactory()
+
+
+@pytest.fixture
+def player1() -> Player:
+    return Player(id=1, firstname="Player 1")
+
+
+@pytest.fixture
+def player2() -> Player:
+    return Player(id=2, firstname="Player 2")
+
+
+@pytest.fixture
+def entry1(event: Event, player1: Player) -> Entry:
+    return Entry(id=1, event=event, player1=player1)
+
+
+@pytest.fixture
+def entry2(event: Event, player2: Player) -> Entry:
+    return Entry(id=2, event=event, player1=player2)
+
+
+@pytest.fixture
+def event() -> Event:
+    return Event(id=1, name="Event")
+
+
+@pytest.fixture
+def stage(event: Event) -> Stage:
+    return Stage(id=1, name="Stage", event=event)
+
+
+@pytest.fixture
+def draw(stage: Stage) -> Draw:
+    return Draw(id=1, name="Draw", type=DrawType.MONRAD, size=8, stage=stage)
+
+
+@pytest.fixture
+def court1() -> Court:
+    return Court(id=1, name="Court 1")
+
+
+@pytest.fixture
+def court2() -> Court:
+    return Court(id=2, name="Court 2")
+
+
+type MatchFactoryType = Callable[..., TCMatch]
+
+
+@pytest.fixture
+def MatchFactory(
+    draw: Draw, now: datetime, court1: Court, entry1: Entry, entry2: Entry
+) -> MatchFactoryType:
+    defaults: dict[str, Any] = {
+        "id": "42-1",
+        "matchnr": 1,
+        "draw": draw,
+        "time": now,
+        "court": court1,
+        "status": MatchStatus.PENDING,
+        "starttime": None,
+        "endtime": None,
+        "A": entry1,
+        "B": entry2,
+    }
+
+    def factory(**kwargs: Any) -> TCMatch:
+        return TCMatch(**defaults | kwargs)
+
+    return factory
+
+
+@pytest.fixture
+def match(MatchFactory: MatchFactoryType) -> TCMatch:
+    return MatchFactory()
