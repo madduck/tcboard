@@ -1,12 +1,14 @@
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 
 import pytest
+import pytest_asyncio
 from pydantic import computed_field
 from tptools.util import ScoresType
 
 from tcboard.alert import Alert
+from tcboard.dbmanager import DBManager
 from tcboard.devinfo import DeviceInfo
 from tcboard.game import Game
 from tcboard.livedata import LiveData
@@ -90,3 +92,20 @@ def FakeLiveDataFactory() -> FakeLiveDataFactoryType:
         return FakeLiveData(court=court, timestamp=timestamp, fakedata=data)
 
     return factory
+
+
+@pytest.fixture
+def livedata(FakeLiveDataFactory: FakeLiveDataFactoryType) -> LiveData:
+    return FakeLiveDataFactory()
+
+
+@pytest_asyncio.fixture
+async def dbmanager() -> AsyncGenerator[DBManager]:
+    async with DBManager(file=None) as db:
+        yield db
+
+
+@pytest_asyncio.fixture
+async def dbmanager_inited(dbmanager: DBManager) -> AsyncGenerator[DBManager]:
+    await dbmanager.init_tables()
+    yield dbmanager
