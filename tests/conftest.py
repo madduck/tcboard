@@ -17,13 +17,14 @@ from tptools import (
     Stage,
 )
 
+from tcboard import TCMatch
 from tcboard.alert import Alert
 from tcboard.dbmanager import DBManager
 from tcboard.devinfo import DeviceInfo
 from tcboard.game import Game
 from tcboard.livedata import LiveData
 from tcboard.livestatus import LiveStatus
-from tcboard.match import TCMatch
+from tcboard.matchstate import MatchState
 
 
 @pytest.fixture
@@ -196,3 +197,25 @@ async def dbmanager() -> AsyncGenerator[DBManager]:
 async def dbmanager_inited(dbmanager: DBManager) -> AsyncGenerator[DBManager]:
     await dbmanager.init_tables()
     yield dbmanager
+
+
+type MatchStateFactoryType = Callable[..., MatchState[FakeLiveData]]
+
+
+@pytest.fixture
+def MatchStateFactory(
+    FakeLiveDataFactory: FakeLiveDataFactoryType, match: TCMatch
+) -> MatchStateFactoryType:
+    def factory(
+        livedata: FakeLiveData | None = None, **livedataargs: Any
+    ) -> MatchState[FakeLiveData]:
+        if livedata is None and livedataargs:
+            livedata = FakeLiveDataFactory(**livedataargs)
+        return MatchState(match=match, livedata=livedata)
+
+    return factory
+
+
+@pytest.fixture
+def matchstate(MatchStateFactory: MatchStateFactoryType) -> MatchState[FakeLiveData]:
+    return MatchStateFactory()
