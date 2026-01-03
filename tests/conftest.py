@@ -17,13 +17,14 @@ from tptools import (
     Stage,
 )
 
+from tcboard import TCMatch
 from tcboard.alert import Alert
 from tcboard.dbmanager import DBManager
 from tcboard.devinfo import DeviceInfo
 from tcboard.game import Game
 from tcboard.livedata import LiveData
 from tcboard.livestatus import LiveStatus
-from tcboard.match import TCMatch
+from tcboard.matchstate import MatchState
 
 
 @pytest.fixture
@@ -162,19 +163,54 @@ def entry2(event: Event, player2: Player) -> Entry:
     return Entry(id=2, event=event, player1=player2)
 
 
+type MatchFactoryType = Callable[..., TCMatch]
+
+
 @pytest.fixture
-def match(
+def MatchFactory(
     draw: Draw, now: datetime, court: Court, entry1: Entry, entry2: Entry
-) -> TCMatch:
-    return TCMatch(
-        id="42-1",
-        matchnr=1,
-        draw=draw,
-        time=now,
-        court=court,
-        status=MatchStatus.PENDING,
-        starttime=None,
-        endtime=None,
-        A=entry1,
-        B=entry2,
-    )
+) -> MatchFactoryType:
+    defaults: dict[str, Any] = {
+        "id": "42-1",
+        "matchnr": 1,
+        "draw": draw,
+        "time": now,
+        "court": court,
+        "status": MatchStatus.PENDING,
+        "starttime": None,
+        "endtime": None,
+        "A": entry1,
+        "B": entry2,
+    }
+
+    def factory(**kwargs: Any) -> TCMatch:
+        return TCMatch(**defaults | kwargs)
+
+    return factory
+
+
+@pytest.fixture
+def match(MatchFactory: MatchFactoryType) -> TCMatch:
+    return MatchFactory()
+
+
+type MatchStateFactoryType = Callable[..., MatchState[FakeLiveData]]
+
+
+@pytest.fixture
+def MatchStateFactory(
+    FakeLiveDataFactory: FakeLiveDataFactoryType, match: TCMatch
+) -> MatchStateFactoryType:
+    def factory(
+        livedata: FakeLiveData | None = None, **livedataargs: Any
+    ) -> MatchState[FakeLiveData]:
+        if livedata is None and livedataargs:
+            livedata = FakeLiveDataFactory(**livedataargs)
+        return MatchState(match=match, livedata=livedata)
+
+    return factory
+
+
+@pytest.fixture
+def matchstate(MatchStateFactory: MatchStateFactoryType) -> MatchState[FakeLiveData]:
+    return MatchStateFactory()
