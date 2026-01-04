@@ -24,9 +24,10 @@ def test_courtid_accessor(court1: Court) -> None:
 def test_serialising_applies_courtnamepolicy(
     court1: Court, mocker: MockerFixture
 ) -> None:
-    pol = mocker.patch.object(CourtNamePolicy, "__call__")
-    _ = CourtState(court=court1).model_dump(context={"courtnamepolicy": pol})
+    pol = mocker.patch.object(CourtNamePolicy, "__call__", return_value="courtstr")
+    dump = CourtState(court=court1).model_dump(context={"courtnamepolicy": pol})
     pol.assert_called_once_with(court1)
+    assert dump["court"] == "courtstr"
 
 
 @pytest.mark.parametrize(
