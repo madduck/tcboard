@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Never, cast
+from typing import Any, Never
 
 from pydantic import (
     BaseModel,
+    SerializeAsAny,
     computed_field,
 )
 from tptools.mixins import ComparableMixin, ReprMixin
@@ -25,14 +26,14 @@ from .matchslot import MatchSlot
 logger = logging.getLogger(__name__)
 
 
-class MatchState[LiveDataT: LiveData](
+class MatchState(
     ComparableMixin,
     ReprMixin,
     BaseModel,
     json_schema_serialization_defaults_required=True,
 ):
     match: TCMatch
-    livedata: LiveDataT | None = None
+    livedata: SerializeAsAny[LiveData] | None = None
     timestamp: datetime | None = None
     locked: bool = False
     acked: bool = False
@@ -113,7 +114,7 @@ class MatchState[LiveDataT: LiveData](
 
         return MatchSlot.UNKNOWN
 
-    def validate_and_receive_livedata(self, data: LiveDataT) -> None | Never:
+    def validate_and_receive_livedata(self, data: LiveData) -> None | Never:
         data.validate_livedata()
 
         if self.livedata is None:
@@ -184,7 +185,8 @@ class MatchState[LiveDataT: LiveData](
                 assert self.livedata is not None
                 return self.livedata.starttime
             case MatchSlot.FINISHED:
-                return cast(LiveDataT, self.livedata).endtime
+                assert self.livedata is not None
+                return self.livedata.endtime
             case _:
                 return None
 

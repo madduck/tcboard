@@ -17,7 +17,7 @@ from .conftest import (
 )
 
 
-def test_timestamp_default(matchstate: MatchState[FakeLiveData]) -> None:
+def test_timestamp_default(matchstate: MatchState) -> None:
     assert matchstate.timestamp is not None
 
 
@@ -30,7 +30,7 @@ def test_timestamp_from_livedata(
     )
 
 
-def test_ack(matchstate: MatchState[FakeLiveData]) -> None:
+def test_ack(matchstate: MatchState) -> None:
     assert not matchstate.acked
     matchstate.ack()
     assert matchstate.acked
@@ -38,7 +38,7 @@ def test_ack(matchstate: MatchState[FakeLiveData]) -> None:
     assert not matchstate.acked
 
 
-def test_lock(matchstate: MatchState[FakeLiveData]) -> None:
+def test_lock(matchstate: MatchState) -> None:
     assert not matchstate.locked
     matchstate.lock()
     assert matchstate.locked
@@ -75,7 +75,7 @@ def test_slot(
 
 
 def test_receive_calls_livedata_validate(
-    matchstate: MatchState[FakeLiveData],
+    matchstate: MatchState,
     livedata: FakeLiveData,
     mocker: MockerFixture,
 ) -> None:
@@ -85,7 +85,7 @@ def test_receive_calls_livedata_validate(
 
 
 def test_receive_initial_livedata(
-    matchstate: MatchState[FakeLiveData],
+    matchstate: MatchState,
     livedata: FakeLiveData,
 ) -> None:
     matchstate.validate_and_receive_livedata(livedata)
@@ -132,36 +132,36 @@ def test_receive_in_sequence(
     )
 
 
-def test_status_property_no_livedata(matchstate: MatchState[FakeLiveData]) -> None:
+def test_status_property_no_livedata(matchstate: MatchState) -> None:
     assert matchstate.status is None
 
 
 def test_status_property_from_livedata(
-    matchstate: MatchState[FakeLiveData], livedata: FakeLiveData
+    matchstate: MatchState, livedata: FakeLiveData
 ) -> None:
     matchstate.validate_and_receive_livedata(livedata)
     assert matchstate.status == str(LiveStatus.UNKNOWN).lower()
 
 
-def test_debug_repr(matchstate: MatchState[FakeLiveData]) -> None:
+def test_debug_repr(matchstate: MatchState) -> None:
     assert matchstate.debug_repr() == str(matchstate)
 
 
-def test_str(matchstate: MatchState[FakeLiveData]) -> None:
+def test_str(matchstate: MatchState) -> None:
     assert str(matchstate).endswith(matchstate.match.id)
 
 
-def test_str_locked(matchstate: MatchState[FakeLiveData]) -> None:
+def test_str_locked(matchstate: MatchState) -> None:
     matchstate.lock()
     assert "🔒" in str(matchstate)
 
 
-def test_str_acked(matchstate: MatchState[FakeLiveData]) -> None:
+def test_str_acked(matchstate: MatchState) -> None:
     matchstate.ack()
     assert "✓" in str(matchstate)
 
 
-def test_str_no_time(matchstate: MatchState[FakeLiveData]) -> None:
+def test_str_no_time(matchstate: MatchState) -> None:
     matchstate = matchstate.model_copy(
         update={"match": matchstate.match.model_copy(update={"time": None})}
     )
@@ -186,9 +186,7 @@ def test_time_pending(
     match: TCMatch,
     now: datetime,
 ) -> None:
-    ms = MatchState[FakeLiveData](
-        match=match.model_copy(update={"time": now}), livedata=None
-    )
+    ms = MatchState(match=match.model_copy(update={"time": now}), livedata=None)
     assert ms.time == now
 
 

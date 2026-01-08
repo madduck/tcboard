@@ -9,7 +9,6 @@ from tptools.namepolicy import CourtNamePolicy
 from tcboard import TCMatch
 from tcboard.alert import Alert
 from tcboard.courtstate import CourtState
-from tcboard.livedata import LiveData
 from tcboard.matchstate import MatchState
 
 
@@ -42,13 +41,13 @@ def test_serialising_only_current_is_reversed(
     reversed: bool,
 ) -> None:
     matchstates = [
-        MatchState[LiveData](
+        MatchState(
             match=match.model_copy(update={"id": str(n)}),
             timestamp=now + datetime.timedelta(seconds=n),
         )
         for n in range(3)
     ]
-    cs = CourtState[MatchState[LiveData]](court=court1)
+    cs = CourtState(court=court1)
     setattr(cs, attr, matchstates)
 
     dump = cs.model_dump()
@@ -62,8 +61,8 @@ def test_serialising_only_current_is_reversed(
 
 
 def test_only_alert_uuids_affect_equality(court1: Court) -> None:
-    cs1 = CourtState[MatchState[LiveData]](court=court1)
-    cs2 = CourtState[MatchState[LiveData]](court=court1)
+    cs1 = CourtState(court=court1)
+    cs2 = CourtState(court=court1)
     alert1 = Alert(text="alert1")
     alert2 = alert1.model_copy(update={"text": "alert2"})
 

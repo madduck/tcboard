@@ -199,7 +199,7 @@ async def dbmanager_inited(dbmanager: DBManager) -> AsyncGenerator[DBManager]:
     yield dbmanager
 
 
-type MatchStateFactoryType = Callable[..., MatchState[FakeLiveData]]
+type MatchStateFactoryType = Callable[..., MatchState]
 
 
 @pytest.fixture
@@ -208,7 +208,7 @@ def MatchStateFactory(
 ) -> MatchStateFactoryType:
     def factory(
         livedata: FakeLiveData | None = None, **livedataargs: Any
-    ) -> MatchState[FakeLiveData]:
+    ) -> MatchState:
         if livedata is None and livedataargs:
             livedata = FakeLiveDataFactory(**livedataargs)
         return MatchState(match=match, livedata=livedata)
@@ -217,5 +217,5 @@ def MatchStateFactory(
 
 
 @pytest.fixture
-def matchstate(MatchStateFactory: MatchStateFactoryType) -> MatchState[FakeLiveData]:
+def matchstate(MatchStateFactory: MatchStateFactoryType) -> MatchState:
     return MatchStateFactory()

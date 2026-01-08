@@ -11,8 +11,6 @@ from tptools import Court
 from tptools.mixins import ComparableMixin, ReprMixin, StrMixin
 from tptools.namepolicy import CourtNamePolicy
 
-from tcboard.livedata import LiveData
-
 from .alert import Alert
 from .devinfo import BatteryStatus
 from .matchstate import MatchState
@@ -20,7 +18,7 @@ from .matchstate import MatchState
 logger = logging.getLogger(__name__)
 
 
-class CourtState[MatchStateT: MatchState[LiveData]](
+class CourtState(
     ComparableMixin,
     ReprMixin,
     StrMixin,
@@ -28,9 +26,9 @@ class CourtState[MatchStateT: MatchState[LiveData]](
     json_schema_serialization_defaults_required=True,
 ):
     court: Court | None
-    pending: list[MatchStateT] = []
-    current: list[MatchStateT] = []
-    finished: list[MatchStateT] = []
+    pending: list[MatchState] = []
+    current: list[MatchState] = []
+    finished: list[MatchState] = []
     tick: float | None = None
     batterylevels: dict[str, BatteryStatus | None] | None = None
     alerts: list[Alert] = []
@@ -46,7 +44,7 @@ class CourtState[MatchStateT: MatchState[LiveData]](
         return (ctx.get("courtnamepolicy") or CourtNamePolicy())(value)
 
     @field_serializer("current", mode="plain")
-    def _sort_by_desc_timestamp(self, current: list[MatchStateT]) -> list[MatchStateT]:
+    def _sort_by_desc_timestamp(self, current: list[MatchState]) -> list[MatchState]:
         return sorted(
             current,
             key=lambda m: (m.timestamp is not None, m.timestamp),
