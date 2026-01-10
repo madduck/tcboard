@@ -51,7 +51,11 @@ class LiveStatus(IntEnum):
         ):
             return True
 
-        elif self == self.FIFTEENSECONDS and other in (self.BETWEENGAMES, self.PREPARE):
+        elif self == self.FIFTEENSECONDS and other in (
+            self.GAMEBALL,
+            self.BETWEENGAMES,
+            self.PREPARE,
+        ):
             return True
 
         return self >= other
