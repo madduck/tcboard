@@ -38,24 +38,6 @@ class Timing(BaseModel, extra="forbid"):
     offsets: list[int] | None = None
 
 
-class Wifi(BaseModel, extra="forbid"):
-    ipaddress: str | None = None
-
-
-class Metadata(BaseModel, extra="forbid"):
-    sourceID: str
-    device: SquoreDeviceInfo | None = None
-    source: str | None = None
-    version: int | None = None
-    language: str | None = None
-    wifi: Wifi | None = None
-    shareURL: str | None = None
-    sourceFeedbackState: (
-        Literal["SourceAcceptedFinalResult"] | Literal["SourceRejectedResult"] | None
-    ) = None
-    sourcePostResultUrl: str | None = None
-
-
 class TimerInfo(BaseModel, extra="forbid"):
     type: (
         Literal["Warmup"]
