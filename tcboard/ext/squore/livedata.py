@@ -57,6 +57,7 @@ class SquoreMatchLiveData(LiveData, SquoreMatch, extra="forbid"):
     isMatchBall: bool
     isVictoryFor: PlayerLetter | None = None
     isUndo: bool = False
+    lastCall: str | None = None
     lastScorer: PlayerLetter | None = None
     liveScoreDeviceId: str
     lockState: LockStateType = None
