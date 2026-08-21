@@ -25,7 +25,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "tptools @ https://github.com/madduck/tptools/archive/refs/heads/main.zip",
+  "tptools",
   "pydantic",
   "uvloop; sys_platform == 'linux'",
   "click",
