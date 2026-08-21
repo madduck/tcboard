@@ -30,7 +30,7 @@ dependencies = [
   "uvloop; sys_platform == 'linux'",
   "click",
   "click-extra (> 7)",
-  "click-async-plugins @ https://github.com/madduck/click-async-plugins/archive/refs/heads/main.zip",
+  "click-async-plugins",
   "fastapi",
   "uvicorn",
   "aiomqtt",

@@ -14,7 +14,7 @@ repos:
           - pytest
           - pytest-asyncio
           - tptools @ https://github.com/madduck/tptools/archive/refs/heads/main.zip
-          - click-async-plugins @ https://github.com/madduck/click-async-plugins/archive/refs/heads/main.zip
+          - click-async-plugins
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.10
     hooks:
