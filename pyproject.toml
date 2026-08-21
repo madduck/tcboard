@@ -29,7 +29,7 @@ dependencies = [
   "pydantic",
   "uvloop; sys_platform == 'linux'",
   "click",
-  "click-extra (> 7)",
+  "click-extra (> 8)",
   "click-async-plugins",
   "fastapi",
   "uvicorn",
