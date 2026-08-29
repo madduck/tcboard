@@ -15,13 +15,20 @@ from .match import SquoreMatch
 from .point import PlayerLetter, Point, ServerSide, make_point_from_squore_line
 
 type ServerType = PlayerLetter
-type LockStateType = (
+type LockStateType = (  # src/com/doubleyellow/scoreboard/model/LockState.java
     Literal["Unlocked"]
     | Literal["UnlockedManual"]
+    | Literal["UnlockedEndOfFinalGame"]
+    | Literal["LockedManual"]
+    | Literal["LockedManualGUI"]
     | Literal["LockedEndOfMatch"]
     | Literal["LockedIdleTime"]
+    | Literal["SharedEndedMatch"]
+    | Literal["LockedEndOfMatchRetired"]
+    | Literal["LockedEndOfMatchConduct"]
+    | Literal["LockedEndOfMatchTimeBased"]
     | None
-)  # TODO: timeout lock
+)
 
 
 class InconsistentStateBug120(TCBoardException): ...
