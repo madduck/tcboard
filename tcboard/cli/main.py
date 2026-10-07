@@ -4,7 +4,8 @@ import importlib.resources
 import logging
 import pathlib
 from contextlib import AsyncExitStack
-from typing import Never
+from functools import partial
+from typing import Any, Never
 
 import click
 import click_extra as clickx
@@ -16,16 +17,17 @@ from click_async_plugins import (
     plugin_group,
     setup_plugins,
 )
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import (
     FileResponse,
     PlainTextResponse,
 )
+from starlette.status import HTTP_404_NOT_FOUND
 from starlette.types import StatefulLifespan, StatelessLifespan
 from tptools import VERSION as TPTOOLS_VERSION
 from tptools.util import silence_logger
 
-from tcboard import VERSION
+from tcboard import VERSION, TCBoard
 
 from .util import CliContext, pass_clictx
 
@@ -66,6 +68,19 @@ def _robotstxt() -> str:
     return "User-agent: *\nDisallow: /\n"
 
 
+def dump_board(request: Request) -> Response:
+    clictx: CliContext = request.app.state.clictx
+    return Response(clictx.board.model_dump_json(), media_type="application/json")
+
+
+def dump_match(request: Request, matchid: str) -> Response:
+    clictx: CliContext = request.app.state.clictx
+    if (m := clictx.board.matchstates_by_matchid.get(matchid)) is None:
+        raise HTTPException(HTTP_404_NOT_FOUND, f"No match found with ID {matchid}")
+    else:
+        return Response(m.model_dump_json(), media_type="application/json")
+
+
 def make_app(
     lifespan: StatelessLifespan[FastAPI] | StatefulLifespan[FastAPI] | None = None,
     *,
@@ -76,11 +91,18 @@ def make_app(
     app.get("/", response_class=PlainTextResponse, name="root")(_pong)
     app.get("/favicon.ico", response_class=FileResponse)(_favicon)
     app.get("/robots.txt", response_class=PlainTextResponse)(_robotstxt)
+    app.get("/debug/board", response_class=Response)(dump_board)
+    app.get("/debug/match/{matchid}", response_class=Response)(dump_match)
 
     return app
 
 
 boardlogger = logging.getLogger(__name__ + ".board")
+
+
+async def on_board_update(board: TCBoard, itc: ITC, **updates: Any) -> None:
+    itc.set("board", board)
+    boardlogger.info("\n" + board.debug_render() + "\n")
 
 
 @plugin_group
