@@ -1,19 +1,19 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
-[tool.hatch.metadata]
-allow-direct-references = true
+[tool.hatch.build.hooks.vcs]
+version-file = "tcboard/_version.py"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.sdist]
-exclude = [".direnv"]
-
-[tool.setuptools_scm]
-write_to = "_version.py"
+exclude = [".direnv", ".gitignore", ".github"]
 
 [project]
 name = "tcboard"
-version = "0.1.0"
+dynamic = ["version"]
 authors = [{ name = "martin f. krafft", email = "tcboard@pobox.madduck.net" }]
 description = "Server to collect and provide tournament data"
 readme = "README.md"

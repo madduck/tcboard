@@ -22,8 +22,10 @@ from fastapi.responses import (
     PlainTextResponse,
 )
 from starlette.types import StatefulLifespan, StatelessLifespan
+from tptools import VERSION as TPTOOLS_VERSION
 from tptools.util import silence_logger
 
+from tcboard import VERSION
 from .util import CliContext, pass_clictx
 
 PLUGINS = ["debug"]
@@ -45,7 +47,10 @@ def _pong(request: Request) -> str:
     client = request.headers.get(
         "X-Forwarded-For", request.client.host if request.client else None
     )
-    return f"Hello {client}, tcboard is running!\n"
+    return (
+        f"Hello {client}, tcboard {VERSION} is running "
+        f"(with tptools {TPTOOLS_VERSION})!\n"
+    )
 
 
 def _favicon() -> FileResponse:
