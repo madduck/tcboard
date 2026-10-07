@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: v2.4.0
     hooks:
       - id: mypy
         additional_dependencies:
@@ -16,7 +16,7 @@ repos:
           - tptools
           - click-async-plugins (>= 0.7.4)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
+    rev: v0.16.10
     hooks:
       - id: ruff-check
         args: [--show-fixes]
