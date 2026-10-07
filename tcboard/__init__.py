@@ -1,3 +1,4 @@
+from .board import TCBoard
 from .exceptions import TCBoardException
 from .match import TCMatch
 from .tournament import TCTournament
@@ -10,6 +11,7 @@ except ImportError:  # pragma: nocover
     Version = None
 
 __all__ = [
+    "TCBoard",
     "TCBoardException",
     "TCMatch",
     "TCTournament",

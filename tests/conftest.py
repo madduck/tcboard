@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 import pytest
@@ -17,7 +17,7 @@ from tptools import (
     Stage,
 )
 
-from tcboard import TCMatch
+from tcboard import TCBoard, TCMatch, TCTournament
 from tcboard.alert import Alert
 from tcboard.dbmanager import DBManager
 from tcboard.devinfo import DeviceInfo
@@ -219,3 +219,43 @@ def MatchStateFactory(
 @pytest.fixture
 def matchstate(MatchStateFactory: MatchStateFactoryType) -> MatchState:
     return MatchStateFactory()
+
+
+@pytest.fixture
+def tournament(
+    MatchFactory: MatchFactoryType,
+    draw: Draw,
+    now: datetime,
+    court1: Court,
+    court2: Court,
+    entry1: Entry,
+    entry2: Entry,
+) -> TCTournament:
+    tourn = TCTournament(name="test tournament")
+    tourn.add_court(court1)
+    tourn.add_court(court2)
+    tourn.add_draw(draw)
+    tourn.add_entries((entry1, entry2))
+
+    for m in range(4):
+        mid = m * 2
+        tourn.add_match(
+            MatchFactory(
+                id=str(mid), matchnr=mid, court=court1, time=now + timedelta(hours=m)
+            )
+        )
+        tourn.add_match(
+            MatchFactory(
+                id=str(mid + 1),
+                matchnr=mid + 1,
+                court=court2,
+                time=now + timedelta(hours=m),
+            )
+        )
+
+    return tourn
+
+
+@pytest.fixture
+def tcboard(tournament: TCTournament) -> TCBoard:
+    return TCBoard(tournament=tournament)

@@ -26,6 +26,7 @@ from tptools import VERSION as TPTOOLS_VERSION
 from tptools.util import silence_logger
 
 from tcboard import VERSION
+
 from .util import CliContext, pass_clictx
 
 PLUGINS = ["debug"]
@@ -108,12 +109,21 @@ boardlogger = logging.getLogger(__name__ + ".board")
     show_default=True,
     help="Port to listen on",
 )
+@click.option(
+    "--debug-match-id",
+    "-d",
+    "debug_match_ids",
+    multiple=True,
+    metavar="MATCHID",
+    help="Match ID to debug",
+)
 @click.pass_context
 def tcboard(
     ctx: click.Context,
     very_debug: bool,
     host: str,
     port: int,
+    debug_match_ids: list[str],
 ) -> None:
     """Collect tournament data and distribute to subscribers"""
 
@@ -127,6 +137,9 @@ def tcboard(
     # the options will be used in the result_callback function down below
     _ = host, port
     itc = ITC()
+    board = TCBoard(debug_match_ids=debug_match_ids)
+    board.register_update_function(partial(on_board_update, itc=itc))
+    itc.set("board", board)
 
     app = make_app()
 
@@ -155,8 +168,9 @@ def runit(
     very_debug: bool,
     host: str,
     port: int,
+    debug_match_ids: list[int],
 ) -> Never:
-    _ = very_debug
+    _ = very_debug, debug_match_ids
 
     loop = new_event_loop()
     asyncio.set_event_loop(loop)

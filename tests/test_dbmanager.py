@@ -1,6 +1,7 @@
 import pytest
 from pydantic import BaseModel
 
+from tcboard.board import TCBoard
 from tcboard.dbmanager import TABLENAMES, DBManager
 from tcboard.livedata import LiveData
 from tcboard.livestatus import LiveStatus
@@ -127,3 +128,32 @@ async def test_get_all_tournament_and_livedata_records(
 
     assert len([r for r in ret if r["type"] == "squorelivedata"]) == 2 * 3
     assert len([r for r in ret if r["type"] == "tournament"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_record_boardstate(dbmanager_inited: DBManager, tcboard: TCBoard) -> None:
+    assert await dbmanager_inited.record_board_state(tcboard) == 1
+
+
+@pytest.mark.asyncio
+async def test_record_boardstate_doesnt_alter_alerts_dict(
+    dbmanager_inited: DBManager, tcboard: TCBoard
+) -> None:
+    alerts = tcboard.alerts_by_courtid.copy()
+    await dbmanager_inited.record_board_state(tcboard)
+    assert alerts == tcboard.alerts_by_courtid
+
+
+@pytest.mark.asyncio
+async def test_get_last_board_state_empty(dbmanager_inited: DBManager) -> None:
+    board = await dbmanager_inited.get_last_board()
+    assert board is None
+
+
+@pytest.mark.asyncio
+async def test_get_last_board_state(
+    dbmanager_inited: DBManager, tcboard: TCBoard
+) -> None:
+    await dbmanager_inited.record_board_state(tcboard)
+    board = await dbmanager_inited.get_last_board()
+    assert board == tcboard

@@ -9,6 +9,8 @@ from aiosqlite import Connection, Cursor, Row, connect
 from aiosqlite.context import Result
 from pydantic import BaseModel
 
+from tcboard.board import TCBoard
+
 from .livedata import LiveData
 from .tournament import TCTournament
 
@@ -115,6 +117,33 @@ class DBManager(AbstractAsyncContextManager["DBManager"]):
                 f"anything to record: {livedata!r}"
             )
             return None
+
+    async def record_board_state(self, board: TCBoard) -> int | None:
+        try:
+            ret = await self.insert_json_record("board", board)
+            logger.debug(f"Recording TCBoard state in DB with ID {ret}")
+            return ret
+
+        except RuntimeError:  # pragma no cover — don't know how to test for this
+            logger.debug(
+                "Recorded no TCBoard state, since there wasn't "
+                f"anything to record: {board!r}"
+            )
+            return None
+
+    async def get_last_board(self) -> TCBoard | None:
+        async with self.execute(
+            "select * from board order by id desc limit 1"
+        ) as cursor:
+            ret = await cursor.fetchone()
+            if ret is None:
+                return None
+
+            logger.info(
+                "Read from database latest board with ID "
+                f"{ret['id']} (timestamp: {ret['timestamp']})"
+            )
+            return TCBoard.model_validate_json(ret["data"])
 
     async def get_latest_tournament_json(self) -> str | None:
         async with self.execute(
