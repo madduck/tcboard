@@ -208,3 +208,11 @@ def test_time_finished(
     ld = FakeLiveDataFactory(endtime=now, status=LiveStatus.FINISHED)
     ms = MatchStateFactory(livedata=ld)
     assert ms.time == now
+
+
+def test_make_from_tcmatch_without_livedata(match: TCMatch) -> None:
+    ms = MatchState.make_from_tcmatch_without_livedata(match)
+    assert ms.match is match
+    assert ms.livedata is not None
+    assert ms.livedata.matchid == match.id
+    assert ms.status == str(LiveStatus.FINISHED).lower()

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Never
+from typing import Any, Never, Self
 
 from pydantic import (
     BaseModel,
@@ -18,6 +18,7 @@ from .exceptions import (
     MatchStateConflict,
     RogueDeviceError,
 )
+from .ext.tptools.livedata import TPData
 from .livedata import LiveData
 from .livestatus import LiveStatus
 from .match import TCMatch
@@ -175,6 +176,14 @@ class MatchState(
         self.timestamp = data.timestamp
 
         return None
+
+    @classmethod
+    def make_from_tcmatch_without_livedata(cls, match: TCMatch) -> Self:
+        livedata = TPData(
+            court=match.court.id if match.court is not None else None,
+            match=match,
+        )
+        return cls(match=match, livedata=livedata)
 
     @property
     def time(self) -> datetime | None:
