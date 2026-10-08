@@ -31,7 +31,7 @@ from tcboard import VERSION, TCBoard
 
 from .util import CliContext, pass_clictx
 
-PLUGINS = ["debug"]
+PLUGINS = ["debug", "tptools"]
 
 try:
     from uvloop import new_event_loop
