@@ -3,9 +3,10 @@ import importlib
 import importlib.resources
 import logging
 import pathlib
-from contextlib import AsyncExitStack
+from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
-from typing import Any, Never
+from typing import Any, Never, cast
 
 import click
 import click_extra as clickx
@@ -13,8 +14,10 @@ import uvicorn
 from click_async_plugins import (
     ITC,
     PluginFactory,
+    PluginLifespan,
     create_plugin_task,
     plugin_group,
+    react_to_data_update,
     setup_plugins,
 )
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -27,7 +30,9 @@ from starlette.types import StatefulLifespan, StatelessLifespan
 from tptools import VERSION as TPTOOLS_VERSION
 from tptools.util import silence_logger
 
-from tcboard import VERSION, TCBoard
+from tcboard import VERSION, TCBoard, TCTournament
+from tcboard.devinfo import DeviceInfo
+from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
 from .util import CliContext, pass_clictx
 
@@ -95,6 +100,35 @@ def make_app(
     app.get("/debug/match/{matchid}", response_class=Response)(dump_match)
 
     return app
+
+
+@asynccontextmanager
+async def receive_tournament(clictx: CliContext) -> PluginLifespan:
+    updates_gen = cast(
+        AsyncGenerator[TCTournament],
+        clictx.itc.updates("tournament", yield_immediately=True),
+    )
+    yield react_to_data_update(updates_gen, callback=clictx.board.process_tournament)
+
+
+@asynccontextmanager
+async def process_squore_livedata(clictx: CliContext) -> PluginLifespan:
+    updates_gen = cast(
+        AsyncGenerator[SquoreMatchLiveData],
+        clictx.itc.updates("squorelivedata", yield_immediately=True),
+    )
+    yield react_to_data_update(
+        updates_gen, callback=clictx.board.process_squore_livedata
+    )
+
+
+@asynccontextmanager
+async def process_squore_devinfo(clictx: CliContext) -> PluginLifespan:
+    updates_gen = cast(
+        AsyncGenerator[DeviceInfo],
+        clictx.itc.updates("squoredevinfo", yield_immediately=True),
+    )
+    yield react_to_data_update(updates_gen, callback=clictx.board.process_deviceinfo)
 
 
 boardlogger = logging.getLogger(__name__ + ".board")
@@ -199,6 +233,10 @@ def runit(
 
     config = uvicorn.Config(clictx.api, host=host, port=port, access_log=False)
     server = uvicorn.Server(config)
+
+    plugin_factories.append(partial(receive_tournament, clictx))
+    plugin_factories.append(partial(process_squore_livedata, clictx))
+    # plugin_factories.append(partial(process_squore_devinfo, clictx))
 
     # We do not use FastAPI's/Starlette's lifespan because of
     # https://github.com/fastapi/fastapi/discussions/13878
