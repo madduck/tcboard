@@ -18,6 +18,7 @@ from httpx2 import URL
 from tptools.util import is_truish, silence_logger
 
 from tcboard.board import TCBoard
+from tcboard.cli.api import configure_api
 from tcboard.cli.debug import debug_key_press_handler
 from tcboard.cli.main import (
     make_app,
@@ -87,6 +88,7 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
         tptools,
         receive_tournament,
         process_squore_livedata,
+        configure_api,
     ]
 
     try:
