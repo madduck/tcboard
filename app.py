@@ -1,17 +1,31 @@
 import asyncio
 import logging
+import os
 import sys
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 
-from click_async_plugins import ITC, PluginFactory, create_plugin_task, setup_plugins
+from click_async_plugins import (
+    ITC,
+    PluginFactory,
+    create_plugin_task,
+    setup_plugins,
+)
 from fastapi import FastAPI
-from tptools.util import silence_logger
+from httpx2 import URL
+from tptools.util import is_truish, silence_logger
 
+from tcboard.board import TCBoard
 from tcboard.cli.debug import debug_key_press_handler
-from tcboard.cli.main import make_app
+from tcboard.cli.main import (
+    make_app,
+    on_board_update,
+    process_squore_livedata,
+    receive_tournament,
+)
+from tcboard.cli.tptools import setup_for_tptools
 from tcboard.cli.util import CliContext
 
 logging.getLogger().setLevel(logging.DEBUG)
@@ -20,27 +34,59 @@ if not sys.warnoptions:
     warnings.simplefilter("default")
     logging.captureWarnings(True)
 
-for name, level in (
+
+THIRD_PARTY_LOG_LEVELS = [
     ("asyncio", logging.INFO),
     ("aiosqlite", logging.INFO),
-    ("watchfiles.main", logging.WARNING),
+    ("watchfiles", logging.WARNING),
+    ("uvicorn", logging.INFO),
     ("uvicorn.error", logging.WARNING),
-    ("tptools.tpmatch", logging.INFO),
     ("click_async_plugins", logging.DEBUG),
-):
+    ("httpcore2", logging.INFO),
+    ("httpx2", logging.INFO),
+]
+
+if is_truish(os.getenv("LESS_DEBUG", os.getenv("LESSDEBUG"))):
+    LOG_LEVELS = [
+        (__name__, logging.INFO),
+        ("tptools", logging.INFO),
+        ("tcboard.cli", logging.INFO),
+        ("tcboard.dbmanager", logging.INFO),
+        ("tcboard.board", logging.INFO),
+    ]
+else:
+    LOG_LEVELS = []
+
+for name, level in LOG_LEVELS + THIRD_PARTY_LOG_LEVELS:
     silence_logger(name, level=level)
 
 logger = logging.getLogger(__name__)
 
+debug_match_ids: list[str] = []
+if dmis := os.getenv("DEBUG_MATCH_IDS", ""):
+    debug_match_ids = dmis.split(",")
+
 
 @asynccontextmanager
 async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
+    board = TCBoard(debug_match_ids=debug_match_ids)
     itc = ITC()
+    itc.set("board", board)
 
     clictx = CliContext(api=api, itc=itc)
 
+    board.register_update_function(partial(on_board_update, itc=itc))
+
+    BOOTSTRAP_URL = os.getenv("BOOTSTRAP_URL")
+    tptools = partial(
+        setup_for_tptools,
+        load_from_url=None if BOOTSTRAP_URL is None else URL(BOOTSTRAP_URL),
+    )
     factories: list[PluginFactory] = [
         debug_key_press_handler,
+        tptools,
+        receive_tournament,
+        process_squore_livedata,
     ]
 
     try:
