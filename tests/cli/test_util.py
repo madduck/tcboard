@@ -1,12 +1,29 @@
 import pytest
 from click_async_plugins import ITC
 from fastapi import HTTPException
+from fastapi.datastructures import Address, Headers
 from pytest_mock import MockType
 from starlette.status import HTTP_424_FAILED_DEPENDENCY
 from tptools import Court
 
 from tcboard import TCBoard, TCTournament
-from tcboard.cli.util import CliContext, get_board, get_courts, get_tournament
+from tcboard.cli.util import (
+    CliContext,
+    get_board,
+    get_courts,
+    get_remote,
+    get_tournament,
+)
+
+
+def test_get_remote(httpcon: MockType) -> None:
+    assert "unknown" in get_remote(httpcon)
+
+    httpcon.client = Address("localhost", 1234)
+    assert get_remote(httpcon) == "localhost"
+
+    httpcon.headers = Headers({"X-Forwarded-For": "192.0.2.1"})
+    assert get_remote(httpcon) == "192.0.2.1"
 
 
 def test_get_clictx_api_roundtrip(itc: ITC, httpcon: MockType) -> None:

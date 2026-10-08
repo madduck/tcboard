@@ -32,6 +32,12 @@ class CliContext(_CliContext):
 pass_clictx = click.make_pass_decorator(CliContext)
 
 
+def get_remote(httpcon: HTTPConnection) -> str:
+    return httpcon.headers.get(
+        "X-Forwarded-For", httpcon.client.host if httpcon.client else "(unknown)"
+    )
+
+
 def get_clictx(httpcon: HTTPConnection) -> CliContext:
     return cast(CliContext, httpcon.app.state.clictx)
 
