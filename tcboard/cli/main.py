@@ -36,7 +36,7 @@ from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
 from .util import CliContext, pass_clictx
 
-PLUGINS = ["debug", "tptools", "api", "db"]
+PLUGINS = ["debug", "tptools", "api", "db", "squoremqtt"]
 
 try:
     from uvloop import new_event_loop

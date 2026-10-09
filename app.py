@@ -29,6 +29,7 @@ from tcboard.cli.main import (
     process_squore_livedata,
     receive_tournament,
 )
+from tcboard.cli.squoremqtt import listen_for_mqtt_messages
 from tcboard.cli.tptools import setup_for_tptools
 from tcboard.cli.util import CliContext
 
@@ -67,6 +68,8 @@ for name, level in LOG_LEVELS + THIRD_PARTY_LOG_LEVELS:
 logger = logging.getLogger(__name__)
 
 
+MQTT_BROKER = os.getenv("MQTT_BROKER", "127.0.0.1:1883")
+
 DB_FILE: pathlib.Path | Literal[":memory:"] | None
 if (envfile := os.getenv("DB", os.getenv("DB_FILE"))) is None:
     DB_FILE = pathlib.Path(__file__).parent / "db.sqlite"
@@ -94,6 +97,24 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
 
     board.register_update_function(partial(on_board_update, itc=itc))
 
+    broker = MQTT_BROKER.split(":")
+    port: int | str
+    if len(broker) == 3:
+        proto, host, port = broker
+        assert proto == "mqtt"
+        host = host[2:]
+
+    elif len(broker) == 2:
+        host, port = broker
+
+    else:
+        port = 1883
+        host = broker[0]
+
+    squoremqtt_client = partial(
+        listen_for_mqtt_messages, server=host, port=int(port), ignore_retained=True
+    )
+
     BOOTSTRAP_URL = os.getenv("BOOTSTRAP_URL")
     tptools = partial(
         setup_for_tptools,
@@ -106,6 +127,7 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
         tptools,
         receive_tournament,
         process_squore_livedata,
+        squoremqtt_client,
         configure_api,
     ]
 

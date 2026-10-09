@@ -4,6 +4,7 @@ from typing import Annotated, Never, cast
 import click
 from click_async_plugins import CliContext as _CliContext
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.datastructures import Address
 from fastapi.requests import HTTPConnection
 from starlette.status import HTTP_424_FAILED_DEPENDENCY
 from tptools import Court
@@ -17,7 +18,9 @@ from ..dbmanager import DBManager
 @dataclass
 class CliContext(_CliContext):
     api: FastAPI = field(default_factory=FastAPI)
+    mqttclients: set[str] = field(default_factory=set)
     dbmgr: DBManager | None = None
+    mqtthost: Address | None = None
 
     def __post_init__(self) -> None:
         self.api.state.clictx = self

@@ -4,7 +4,6 @@ import math
 import sys
 from contextlib import asynccontextmanager
 from functools import partial
-from typing import Any
 
 from click_async_plugins import PluginLifespan, plugin
 from click_async_plugins.debug import (
@@ -35,11 +34,11 @@ def clear_all_errors(clictx: CliContext) -> None:
     asyncio.create_task(clictx.board.clear_all_errors())
 
 
-def list_connections(_: CliContext) -> str | None:
+def list_connections(clictx: CliContext) -> str | None:
     """List open connections"""
     ret = "Open connections:"
 
-    conns: list[Any] = []
+    conns = list(clictx.mqttclients)
     if (nconn := len(conns)) == 0:
         return f"{ret} (none)"
     else:
