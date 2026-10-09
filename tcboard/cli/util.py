@@ -1,3 +1,6 @@
+# needed < 3.14 so that annotations aren't evaluated
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Never, cast
 
