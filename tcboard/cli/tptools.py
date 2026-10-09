@@ -70,13 +70,13 @@ async def squore_result(request: Request) -> JSONResponse:
                 "message": dedent(
                     f"""\
                     <html><body>
-                        <h1>Please take the tablet to tournament control<h1>
+                        <h1>Please take the tablet to tournament control</h1>
 
                         <pre>
                         {exc}
                         </pre>
 
-                    </body</html>
+                    </body></html>
                     """
                 ),
             }
