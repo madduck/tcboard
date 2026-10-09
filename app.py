@@ -1,11 +1,13 @@
 import asyncio
 import logging
 import os
+import pathlib
 import sys
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
+from typing import Literal
 
 from click_async_plugins import (
     ITC,
@@ -19,6 +21,7 @@ from tptools.util import is_truish, silence_logger
 
 from tcboard.board import TCBoard
 from tcboard.cli.api import configure_api
+from tcboard.cli.db import database_backend
 from tcboard.cli.debug import debug_key_press_handler
 from tcboard.cli.main import (
     make_app,
@@ -63,6 +66,19 @@ for name, level in LOG_LEVELS + THIRD_PARTY_LOG_LEVELS:
 
 logger = logging.getLogger(__name__)
 
+
+DB_FILE: pathlib.Path | Literal[":memory:"] | None
+if (envfile := os.getenv("DB", os.getenv("DB_FILE"))) is None:
+    DB_FILE = pathlib.Path(__file__).parent / "db.sqlite"
+
+elif envfile == ":memory:":
+    DB_FILE = None
+
+else:
+    DB_FILE = pathlib.Path(envfile)
+
+database_backend = partial(database_backend, file=DB_FILE)
+
 debug_match_ids: list[str] = []
 if dmis := os.getenv("DEBUG_MATCH_IDS", ""):
     debug_match_ids = dmis.split(",")
@@ -83,8 +99,10 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
         setup_for_tptools,
         load_from_url=None if BOOTSTRAP_URL is None else URL(BOOTSTRAP_URL),
     )
+
     factories: list[PluginFactory] = [
         debug_key_press_handler,
+        database_backend,
         tptools,
         receive_tournament,
         process_squore_livedata,

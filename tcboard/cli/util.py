@@ -11,11 +11,13 @@ from tptools import Court
 from tcboard.tournament import TCTournament
 
 from ..board import TCBoard
+from ..dbmanager import DBManager
 
 
 @dataclass
 class CliContext(_CliContext):
     api: FastAPI = field(default_factory=FastAPI)
+    dbmgr: DBManager | None = None
 
     def __post_init__(self) -> None:
         self.api.state.clictx = self
