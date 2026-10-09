@@ -54,6 +54,7 @@ dev = [
   "coverage",
   "pytest-cov",
   "types-tabulate",
+  "types-python-dateutil",
 ]
 
 [project.scripts]
