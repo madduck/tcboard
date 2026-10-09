@@ -80,7 +80,7 @@ def interval_generator[T](
     else:
         stream = aiostream.stream.just(yld)
 
-    return stream if skip is None else aiostream.stream.skip(stream, n=skip)
+    return stream if skip is None else stream | aiostream.pipe.skip(n=skip)
 
 
 def get_remote(httpcon: HTTPConnection) -> str | None:
