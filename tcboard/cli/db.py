@@ -86,7 +86,8 @@ async def database_backend(
                     livedata = SquoreMatchLiveData.model_validate_json(ldjson)
                     await clictx.board.process_squore_livedata(livedata)
                     cnt += 1
-                else:
+
+                if cnt > 0:
                     should_notify = True
                     logger.info(f"Read {cnt} records of livedata from database")
 
