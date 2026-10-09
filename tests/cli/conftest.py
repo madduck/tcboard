@@ -1,8 +1,11 @@
+from typing import cast
+from unittest.mock import MagicMock
+
 import pytest
 from click.testing import CliRunner
 from click_async_plugins import ITC
 from fastapi.requests import HTTPConnection
-from pytest_mock import MockerFixture, MockType
+from pytest_mock import MockerFixture
 from starlette.datastructures import MutableHeaders
 
 from tcboard import TCBoard, TCTournament
@@ -10,11 +13,11 @@ from tcboard.cli.util import CliContext
 
 
 @pytest.fixture
-def httpcon(mocker: MockerFixture) -> MockType:
+def httpcon(mocker: MockerFixture) -> MagicMock:
     httpcon = mocker.MagicMock(spec=HTTPConnection)
     httpcon.headers = MutableHeaders({})
     httpcon.client = None
-    return httpcon
+    return cast(MagicMock, httpcon)
 
 
 @pytest.fixture
