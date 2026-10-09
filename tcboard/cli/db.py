@@ -77,10 +77,6 @@ async def database_backend(
             async with clictx.board.disable_updates():
                 if (tjson := await db.get_latest_tournament_json()) is not None:
                     tournament = TCTournament.model_validate_json(tjson)
-                    import ipdb
-
-                    ipdb.set_trace()  # noqa: E402 E702 I001 # fmt: skip
-                    # check whether tournament is a TCTournament
                     await clictx.board.process_tournament(tournament)
                     should_notify = True
                     logger.info(f"Read tournament from database: {tournament!r}")
@@ -100,13 +96,6 @@ async def database_backend(
         async def record_board_state(board: TCBoard, **updates: Any) -> None:
             await db.record_board_state(board, **updates)
 
-        from typing import Any, Callable, Coroutine
-
-        from tcboard.board import UpdateCallable
-
-        _a: Callable[[TCBoard], Coroutine[Any, Any, None]] = record_board_state
-        _b: Callable[..., Coroutine[Any, Any, None]] = record_board_state
-        _check: UpdateCallable = record_board_state
         clictx.board.register_update_function(record_board_state)
 
         yield receive_updates(

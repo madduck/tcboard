@@ -64,7 +64,6 @@ async def _replay_events(clictx: CliContext, db: DBManager, speed: float) -> Non
     ts_prev: datetime | None = None
     dtparse = dtparser().parse
     board = clictx.board
-    alerts = board.alerts_by_courtid.copy()
     async for rec in db.get_all_tournament_and_livedata_records():
         ts = dtparse(rec["timestamp"])
         delay = ts - (ts_prev or ts)
@@ -84,13 +83,6 @@ async def _replay_events(clictx: CliContext, db: DBManager, speed: float) -> Non
                 )
 
         ts_prev = ts
-
-        if board.alerts_by_courtid != alerts:
-            import ipdb
-
-            ipdb.set_trace()  # noqa: E402 E702 I001 # fmt: skip
-
-        alerts = board.alerts_by_courtid.copy()
 
 
 @asynccontextmanager
