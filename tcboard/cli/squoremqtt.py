@@ -1,12 +1,12 @@
 import asyncio
 import logging
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from functools import partial
 from typing import Protocol
 
 import click
-from aiomqtt import Client, Message, MessagesIterator, MqttError
+from aiomqtt import Client, Message, MqttError
 from click_async_plugins import PluginLifespan, plugin
 from fastapi.datastructures import Address
 from pydantic import ValidationError
@@ -89,7 +89,7 @@ async def _receive_livedata(
 
 async def _mqtt_loop(
     *,
-    messages_gen: MessagesIterator,
+    messages_gen: AsyncIterator[Message],
     callbacks: Mapping[str, MessageCallback],
 ) -> None:
     async for message in messages_gen:
