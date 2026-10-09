@@ -155,8 +155,6 @@ async def remote_control_publisher(
 @pass_clictx
 async def remotectrl(
     clictx: CliContext,
-    server: str,
-    port: int,
     remotectrl_topic: str,
 ) -> PluginLifespan:
     """Remote-control clients when matches are put on court"""
