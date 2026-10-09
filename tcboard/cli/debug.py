@@ -34,11 +34,24 @@ def clear_all_errors(clictx: CliContext) -> None:
     asyncio.create_task(clictx.board.clear_all_errors())
 
 
+def close_websockets(clictx: CliContext) -> None:
+    """Close all but the first WebSocket connection, or the one if there is only one"""
+    to_close = (
+        clictx.websockets[1:] if len(clictx.websockets) > 1 else clictx.websockets
+    )
+    for ws in to_close:
+        # TODO: change when click_async_plugins supports coroutines
+        asyncio.create_task(ws.disconnect(reason="Force-close in debug mode"))
+
+
 def list_connections(clictx: CliContext) -> str | None:
     """List open connections"""
     ret = "Open connections:"
 
     conns = list(clictx.mqttclients)
+    for ws in clictx.websockets:
+        conns.append(ws.connstr)
+
     if (nconn := len(conns)) == 0:
         return f"{ret} (none)"
     else:
@@ -74,6 +87,7 @@ async def debug_key_press_handler(clictx: CliContext) -> PluginLifespan:
     key_to_cmd: KeyCmdMapType[CliContext] = {
         0x02: KeyAndFunc("^B", render_board),
         0x12: KeyAndFunc("^R", simulate_board_change),
+        0x17: KeyAndFunc("^W", close_websockets),
         0x18: KeyAndFunc("^X", clear_all_errors),
         0x0C: KeyAndFunc("^L", list_connections),
         0x16: KeyAndFunc("^V", list_court_devices),

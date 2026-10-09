@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Annotated, Never, cast
+from typing import TYPE_CHECKING, Annotated, Never, cast
 
 import click
 from click_async_plugins import CliContext as _CliContext
@@ -14,11 +14,15 @@ from tcboard.tournament import TCTournament
 from ..board import TCBoard
 from ..dbmanager import DBManager
 
+if TYPE_CHECKING:
+    from .ws import WSHandler
+
 
 @dataclass
 class CliContext(_CliContext):
     api: FastAPI = field(default_factory=FastAPI)
     mqttclients: set[str] = field(default_factory=set)
+    websockets: list[WSHandler] = field(default_factory=list)
     dbmgr: DBManager | None = None
     mqtthost: Address | None = None
 

@@ -32,6 +32,7 @@ from tcboard.cli.main import (
 from tcboard.cli.squoremqtt import listen_for_mqtt_messages
 from tcboard.cli.tptools import setup_for_tptools
 from tcboard.cli.util import CliContext
+from tcboard.cli.ws import configure_for_websockets
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -128,6 +129,7 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
         receive_tournament,
         process_squore_livedata,
         squoremqtt_client,
+        configure_for_websockets,
         configure_api,
     ]
 
