@@ -303,7 +303,7 @@ class TCBoard(BaseModel[None]):
             else:
                 self.matchstates_by_matchid[matchid].unack()
 
-        except IndexError as exc:
+        except KeyError as exc:
             raise EntityNotFoundError(
                 Alert.from_exception(
                     exc,
@@ -321,7 +321,7 @@ class TCBoard(BaseModel[None]):
         try:
             self.matchstates_by_matchid[matchid].reset()
 
-        except IndexError as exc:
+        except KeyError as exc:
             raise EntityNotFoundError(
                 Alert.from_exception(
                     exc, text="Match not found to reset", matchid=matchid
