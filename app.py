@@ -29,6 +29,7 @@ from tcboard.cli.main import (
     process_squore_livedata,
     receive_tournament,
 )
+from tcboard.cli.remotectrl import remote_control_publisher
 from tcboard.cli.squoremqtt import listen_for_mqtt_messages
 from tcboard.cli.tptools import setup_for_tptools
 from tcboard.cli.util import CliContext
@@ -115,6 +116,7 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
     squoremqtt_client = partial(
         listen_for_mqtt_messages, server=host, port=int(port), ignore_retained=True
     )
+    remote_control = partial(remote_control_publisher)
 
     BOOTSTRAP_URL = os.getenv("BOOTSTRAP_URL")
     tptools = partial(
@@ -129,6 +131,7 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
         receive_tournament,
         process_squore_livedata,
         squoremqtt_client,
+        remote_control,
         configure_for_websockets,
         configure_api,
     ]
