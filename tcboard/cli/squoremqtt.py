@@ -3,7 +3,7 @@ import logging
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from functools import partial
-from typing import Protocol, cast
+from typing import Protocol
 
 import click
 from aiomqtt import Client, Message, MessagesIterator, MqttError
@@ -37,7 +37,7 @@ async def _receive_devinfo(message: Message, *, clictx: CliContext) -> None:
         return
 
     try:
-        validated = SquoreDeviceInfo.model_validate_json(cast(bytes, message.payload))
+        validated = SquoreDeviceInfo.model_validate_json(message.payload)
 
     except ValidationError as exc:
         logger.warning(f"DeviceInfo message does not validate: {exc}")
@@ -56,9 +56,7 @@ async def _receive_livedata(
         return
 
     try:
-        validated = SquoreMatchLiveData.model_validate_json(
-            cast(bytes, message.payload)
-        )
+        validated = SquoreMatchLiveData.model_validate_json(message.payload)
 
     except ValidationError as exc:
         missing: list[str] = []
@@ -108,7 +106,7 @@ async def _mqtt_loop(
         if not handled:
             logger.warning(
                 f"Message on topic {message.topic} had no matching callback: "
-                f"{message.payload}"
+                f"{message.payload!r}"
             )
 
 
