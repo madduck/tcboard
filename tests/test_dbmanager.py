@@ -131,6 +131,20 @@ async def test_get_all_tournament_and_livedata_records(
 
 
 @pytest.mark.asyncio
+async def test_get_all_records_keeps_identical_tournaments(
+    dbmanager_inited: DBManager,
+) -> None:
+    # Identical records must not be deduplicated: replaying the same tournament
+    # twice is a valid event stream.  A plain UNION would drop the duplicate.
+    await dbmanager_inited.record_tournament(TCTournament(name="same"))
+    await dbmanager_inited.record_tournament(TCTournament(name="same"))
+
+    ret = [r async for r in dbmanager_inited.get_all_tournament_and_livedata_records()]
+
+    assert len([r for r in ret if r["type"] == "tournament"]) == 2
+
+
+@pytest.mark.asyncio
 async def test_record_boardstate(dbmanager_inited: DBManager, tcboard: TCBoard) -> None:
     assert await dbmanager_inited.record_board_state(tcboard) == 1
 

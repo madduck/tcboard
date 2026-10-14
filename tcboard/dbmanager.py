@@ -186,7 +186,7 @@ class DBManager(AbstractAsyncContextManager["DBManager"]):
     ) -> AsyncGenerator[dict[str, Any]]:
         async with self.execute(  # TODO:
             "select timestamp, 'tournament' as type, data from tournament "
-            "union "
+            "union all "
             "select timestamp, 'squorelivedata' as type, data from squorelivedata "
             "order by timestamp"
         ) as cursor:
