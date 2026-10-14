@@ -1,74 +1,33 @@
-from typing import Any, Literal, Self
+"""The tcboard-side Squore match.
 
-from pydantic import BaseModel
+The data structure itself lives in :mod:`squoredata`; this module adds the
+tcboard-specific constructor helpers and re-exports the nested models so that
+existing imports keep working.
+"""
+
+from typing import Any, Self
+
+from squoredata import Clubs, Colors, Countries, Event, Format, Metadata, Players, Wifi
+from squoredata import SquoreMatch as SquoreMatchBase
 from tptools import Entry, Match
 from tptools.entry import PlayerExportStruct
 from tptools.namepolicy import CountryNamePolicy
 
-from .devinfo import SquoreDeviceInfo
+__all__ = [
+    "Clubs",
+    "Colors",
+    "Countries",
+    "Event",
+    "Format",
+    "Metadata",
+    "Players",
+    "SquoreMatch",
+    "Wifi",
+]
 
 
-class Players(BaseModel, extra="forbid"):
-    A: str
-    B: str
-
-
-class PlayersProps(BaseModel, extra="forbid"):
-    A: str | None = None
-    B: str | None = None
-
-
-class Colors(PlayersProps): ...
-
-
-class Countries(PlayersProps): ...
-
-
-class Clubs(PlayersProps): ...
-
-
-class Event(BaseModel, extra="forbid"):
-    name: str
-    division: str
-
-
-class Format(BaseModel, extra="forbid"):
-    numberOfPointsToWinGame: int = 11
-    numberOfGamesToWinMatch: int = 3
-    useHandInHandOutScoring: bool = False
-
-
-class Wifi(BaseModel, extra="forbid"):
-    ipaddress: str | None = None
-    ssid: str | None = None
-
-
-class Metadata(BaseModel, extra="forbid"):
-    sourceID: str
-    device: SquoreDeviceInfo | None = None
-    source: str | None = None
-    version: int | None = None
-    language: str | None = None
-    wifi: Wifi | None = None
-    shareURL: str | None = None
-    sourceFeedbackState: (
-        Literal["SourceAcceptedFinalResult"] | Literal["SourceRejectedResult"] | None
-    ) = None
-    sourcePostResultUrl: str | None = None
-
-
-class SquoreMatch(BaseModel, extra="forbid"):
-    players: Players
-    clubs: Clubs | None = None
-    colors: Colors | None = None
-    countries: Countries | None = None
-    event: Event
-    format: Format
-    metadata: Metadata
-
-    @property
-    def matchid(self) -> str:
-        return self.metadata.sourceID
+class SquoreMatch(SquoreMatchBase):
+    """A Squore match, constructible from a tptools match."""
 
     @staticmethod
     def _get_constructor_data(match: Match) -> dict[str, Any]:

@@ -1,8 +1,17 @@
 import itertools
 from datetime import datetime
-from typing import Any, Literal, Never
+from typing import Never
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import computed_field
+from squoredata import (
+    SquoreMatchLiveData as SquoreMatchLiveDataBase,
+)
+from squoredata import (
+    TimerInfo,
+    Timing,
+    When,
+    make_point_from_squore_line,
+)
 from tptools.util import ScoresType
 
 from ...alert import Alert
@@ -10,73 +19,29 @@ from ...exceptions import TCBoardException
 from ...game import Game
 from ...livedata import LiveData
 from ...livestatus import LiveStatus
+from ...point import Point
 from .devinfo import SquoreDeviceInfo
-from .match import SquoreMatch
-from .point import PlayerLetter, Point, ServerSide, make_point_from_squore_line
 
-type ServerType = PlayerLetter
-type LockStateType = (  # src/com/doubleyellow/scoreboard/model/LockState.java
-    Literal["Unlocked"]
-    | Literal["UnlockedManual"]
-    | Literal["UnlockedEndOfFinalGame"]
-    | Literal["LockedManual"]
-    | Literal["LockedManualGUI"]
-    | Literal["LockedEndOfMatch"]
-    | Literal["LockedIdleTime"]
-    | Literal["SharedEndedMatch"]
-    | Literal["LockedEndOfMatchRetired"]
-    | Literal["LockedEndOfMatchConduct"]
-    | Literal["LockedEndOfMatchTimeBased"]
-    | None
-)
+__all__ = [
+    "InconsistentStateBug120",
+    "SquoreMatchLiveData",
+    "TimerInfo",
+    "Timing",
+    "When",
+]
 
 
 class InconsistentStateBug120(TCBoardException): ...
 
 
-class When(BaseModel, extra="forbid"):
-    date: str
-    time: str
+class SquoreMatchLiveData(LiveData, SquoreMatchLiveDataBase):
+    """Live Squore data, wired into the tcboard ``LiveData`` abstraction.
 
-
-class Timing(BaseModel, extra="forbid"):
-    start: str
-    end: str
-    offsets: list[int] | None = None
-
-
-class TimerInfo(BaseModel, extra="forbid"):
-    type: (
-        Literal["Warmup"]
-        | Literal["UntilStartOfFirstGame"]
-        | Literal["UntilStartOfNextGame"]
-    )
-    totalSeconds: int
-
-
-class SquoreMatchLiveData(LiveData, SquoreMatch, extra="forbid"):
-    appName: Literal["Squore"]
-    appPackage: Literal["com.doubleyellow.scoreboard"]
-    customData: dict[str, Any] | None = None
-    gamescores: str | None = None
-    isGameBall: bool
-    isHandOut: bool
-    isMatchBall: bool
-    isVictoryFor: PlayerLetter | None = None
-    isUndo: bool = False
-    lastCall: str | None = None
-    lastScorer: PlayerLetter | None = None
-    liveScoreDeviceId: str
-    lockState: LockStateType = None
-    maxNrOfPowerPlays: int | None = None
-    result: str
-    score: list[list[str]] = Field(default_factory=list[list[str]])
-    server: ServerType
-    serveSide: ServerSide
-    start: str
-    timerInfo: TimerInfo | None = None
-    timing: list[Timing] = Field(default_factory=list[Timing])
-    when: When
+    ``squoredata`` provides the data structure and the derived ``status``,
+    ``scores`` and ``games``.  tcboard needs those to speak its own ``Game``,
+    ``Point`` and ``LiveStatus`` types, so they are overridden here, together
+    with the ``LiveData`` accessors the squoredata model leaves out.
+    """
 
     @property
     def matchid(self) -> str:
@@ -84,32 +49,16 @@ class SquoreMatchLiveData(LiveData, SquoreMatch, extra="forbid"):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def status(self) -> LiveStatus:
-        if self.timerInfo:
-            if self.timerInfo.type == "Warmup":
-                return LiveStatus.WARMUP
+    def status(self) -> LiveStatus:  # type: ignore[override]
+        # Intentionally tcboard's LiveStatus; squoredata has its own, identical
+        # enum that tcboard code cannot use for comparisons.
+        sqstatus = SquoreMatchLiveDataBase.status.fget(self)  # type: ignore[attr-defined]
 
-            if self.timerInfo.type == "UntilStartOfFirstGame":
-                return LiveStatus.PREPARE
+        try:
+            return LiveStatus[sqstatus.name]
 
-            elif self.timerInfo.totalSeconds == 15:
-                return LiveStatus.FIFTEENSECONDS
-
-            return LiveStatus.BETWEENGAMES
-
-        elif self.score:
-            if self.isMatchBall:
-                return LiveStatus.MATCHBALL
-
-            elif self.isGameBall:
-                return LiveStatus.GAMEBALL
-
-            elif self.isVictoryFor:
-                return LiveStatus.FINISHED
-
-            return LiveStatus.ONGOING
-
-        return LiveStatus.READY
+        except KeyError:  # pragma: nocover
+            return LiveStatus.UNKNOWN
 
     def can_come_after(self, other: LiveData) -> bool:
         if self.isUndo:
@@ -128,7 +77,9 @@ class SquoreMatchLiveData(LiveData, SquoreMatch, extra="forbid"):
         if self.metadata.device is None:
             return None
 
-        return self.metadata.device.model_copy(update={"deviceid": self.deviceid})
+        return SquoreDeviceInfo.model_validate(
+            self.metadata.device.model_dump() | {"deviceid": self.deviceid}
+        )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -142,29 +93,37 @@ class SquoreMatchLiveData(LiveData, SquoreMatch, extra="forbid"):
             return datetime.fromisoformat(self.timing[-1].end)
         return None
 
-    def nr_games_played(self) -> int:
-        return sum(int(x) for x in self.result.split("-"))
-
     @computed_field  # type: ignore[prop-decorator]
     @property
     def scores(self) -> ScoresType:
-        if self.gamescores is None:
-            return []
+        # LiveData declares this abstract; squoredata implements it.  Delegate
+        # explicitly so the ABC is satisfied with the tcboard ScoresType.
+        return SquoreMatchLiveDataBase.scores.fget(self)  # type: ignore[attr-defined,no-any-return]
 
-        ret = []
-        for gscore in self.gamescores.split(","):
-            ret.append((int((s := gscore.split("-"))[0]), int(s[1])))
-        return ret
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def winner(self) -> int | None:
+        # LiveData declares this abstract; squoredata implements it.
+        return SquoreMatchLiveDataBase.winner.fget(self)  # type: ignore[attr-defined,no-any-return]
 
-    def _get_scoreline(
+    def _get_scoreline(  # type: ignore[override]
         self, scores: list[str], offsets: list[int] | None
     ) -> list[Point]:
         ret: list[Point] = []
 
         prev_offset = 0
         for point, offset in itertools.zip_longest(scores, offsets or []):
+            squorepoint = make_point_from_squore_line(
+                point, duration=offset - prev_offset
+            )
             ret.append(
-                make_point_from_squore_line(point, duration=offset - prev_offset)
+                Point(
+                    server=squorepoint.server,
+                    serveside=squorepoint.serveside,
+                    player=squorepoint.player,
+                    data=squorepoint.data,
+                    duration=squorepoint.duration,
+                )
             )
             prev_offset = offset
 
@@ -172,7 +131,8 @@ class SquoreMatchLiveData(LiveData, SquoreMatch, extra="forbid"):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def games(self) -> list[Game]:
+    def games(self) -> list[Game]:  # type: ignore[override]
+        # Intentionally returns tcboard Game objects, built from tcboard Points.
         nr_games_played = self.nr_games_played()
         ret = []
 
@@ -210,13 +170,6 @@ class SquoreMatchLiveData(LiveData, SquoreMatch, extra="forbid"):
             ret.append(Game(score=(0, 0)))
         return ret
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def winner(self) -> int | None:
-        if self.isVictoryFor is None:
-            return None
-        return {"A": 0, "B": 1}[self.isVictoryFor]
-
     def validate_livedata(self) -> Never | None:
         if len([t for t in self.timing if t.offsets is not None]) != len(self.scores):
             raise InconsistentStateBug120(
@@ -234,10 +187,3 @@ class SquoreMatchLiveData(LiveData, SquoreMatch, extra="forbid"):
 
         else:
             return super().debug_repr()
-
-    @field_validator("court", mode="before")
-    @classmethod
-    def handle_no_court_as_string(
-        cls, data: Literal["null"] | int | None
-    ) -> int | None:
-        return None if data == "null" else data
