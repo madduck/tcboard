@@ -118,7 +118,7 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
     )
     remote_control = partial(remote_control_publisher)
 
-    BOOTSTRAP_URL = os.getenv("BOOTSTRAP_URL")
+    BOOTSTRAP_URL = os.getenv("BOOTSTRAP_URL") or None
     tptools = partial(
         setup_for_tptools,
         load_from_url=None if BOOTSTRAP_URL is None else URL(BOOTSTRAP_URL),
