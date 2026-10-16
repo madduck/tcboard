@@ -48,7 +48,7 @@ THIRD_PARTY_LOG_LEVELS = [
     ("watchfiles", logging.WARNING),
     ("uvicorn", logging.INFO),
     ("uvicorn.error", logging.WARNING),
-    ("click_async_plugins", logging.DEBUG),
+    ("click_async_plugins", logging.WARNING),
     ("httpcore2", logging.INFO),
     ("httpx2", logging.INFO),
 ]
@@ -58,6 +58,8 @@ if is_truish(os.getenv("LESS_DEBUG", os.getenv("LESSDEBUG"))):
         (__name__, logging.INFO),
         ("tptools", logging.INFO),
         ("tcboard.cli", logging.INFO),
+        ("tcboard.cli.db", logging.INFO),
+        ("tcboard.cli.ws", logging.INFO),
         ("tcboard.dbmanager", logging.INFO),
         ("tcboard.board", logging.INFO),
     ]
