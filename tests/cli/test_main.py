@@ -2,9 +2,9 @@ import asyncio
 import importlib
 import pathlib
 import sys
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import click
@@ -35,6 +35,11 @@ from .conftest import cancel, wait_until
 
 FAVICON = pathlib.Path(main_module.__file__).parent.parent / "assets" / "favicon.ico"
 
+# Captured before the fake_exit fixture replaces it, so the real hard-exit can
+# be exercised directly. cast() hides the Never return so mypy does not treat
+# the code after the call as unreachable.
+REAL_EXIT = cast("Callable[[int], None]", main_module._exit)
+
 
 @pytest.fixture
 def app(clictx: CliContext) -> FastAPI:
@@ -48,6 +53,24 @@ def fake_ipdb(mocker: MockerFixture) -> MagicMock:
     fake = MagicMock(name="ipdb")
     mocker.patch.dict(sys.modules, {"ipdb": fake})
     return fake
+
+
+@pytest.fixture(autouse=True)
+def fake_exit(mocker: MockerFixture) -> None:
+    """Keep the hard exit from killing the test process.
+
+    _exit() tears the Click context down explicitly, then bypasses the
+    interpreter's atexit thread join with os._exit(). Tests cannot survive
+    that, so replace it with click's normal Exit for the runit tests.
+    """
+
+    def _exit(code: int) -> None:
+        click.get_current_context().close()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        raise click.exceptions.Exit(code)
+
+    mocker.patch("tcboard.cli.main._exit", side_effect=_exit)
 
 
 @pytest.fixture
@@ -282,6 +305,22 @@ def test_keyboard_interrupt_is_a_clean_exit(
     fake_uvicorn["server"].serve.side_effect = failing_after_start(KeyboardInterrupt())
     result = runner.invoke(tcboard, ["api"])
     assert result.exit_code == 0, result.output
+
+
+def test_exit_tears_down_click_and_hard_exits(mocker: MockerFixture) -> None:
+    os_exit = mocker.patch("tcboard.cli.main.os._exit")
+    shutdown = mocker.patch("tcboard.cli.main.logging.shutdown")
+    closed: list[str] = []
+
+    ctx = click.Context(click.Command("tcboard"))
+    ctx.call_on_close(lambda: closed.append("click"))
+    mocker.patch("tcboard.cli.main.click.get_current_context", return_value=ctx)
+
+    REAL_EXIT(3)
+
+    assert closed == ["click"], "Click teardown must run before the hard exit"
+    shutdown.assert_called_once()
+    os_exit.assert_called_once_with(3)
 
 
 def test_unexpected_error_drops_into_debugger_and_exits_1(
