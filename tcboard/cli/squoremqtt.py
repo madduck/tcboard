@@ -16,6 +16,10 @@ from .util import CliContext, pass_clictx
 
 DEFAULT_MQTT_BROKER = "127.0.0.1"
 DEFAULT_MQTT_PORT = 1883
+# paho-mqtt defaults its connect timeout to 5s. Cap it so a shutdown during
+# the initial connect does not wait on the uncancellable connect thread for
+# longer than necessary (see _mqtt_handler).
+MQTT_CONNECT_TIMEOUT = 2.0
 SQUORE_MATCH_MQTT_TOPIC = "tptools/+/Squore/+/match"
 SQUORE_DEVINFO_MQTT_TOPIC = "tptools/Squore/+/deviceInfo"
 
@@ -124,7 +128,13 @@ async def _mqtt_handler(
     try:
         while True:
             try:
-                async with Client(server, port) as client:
+                client = Client(server, port)
+                # aiomqtt runs paho's blocking connect in a thread that asyncio
+                # cannot cancel; cap how long that thread can block. aiomqtt
+                # does not expose paho's connect_timeout, so reach for the
+                # underlying paho client.
+                client._client.connect_timeout = MQTT_CONNECT_TIMEOUT
+                async with client:
                     logger.debug(f"Connected {connstr}")
                     await client.subscribe(match_topic)
                     await client.subscribe(devinfo_topic)

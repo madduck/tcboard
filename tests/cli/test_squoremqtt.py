@@ -9,6 +9,7 @@ from fastapi.datastructures import Address
 from pytest_mock import MockerFixture
 
 from tcboard.cli.squoremqtt import (
+    MQTT_CONNECT_TIMEOUT,
     SQUORE_DEVINFO_MQTT_TOPIC,
     SQUORE_MATCH_MQTT_TOPIC,
     _mqtt_handler,
@@ -43,9 +44,15 @@ def make_message(topic: str, payload: bytes | None, retain: bool = False) -> Mes
 class FakeClient:
     """Minimal stand-in for aiomqtt.Client used as an async context manager."""
 
+    class _Paho:
+        connect_timeout: float = 0.0
+
     def __init__(self, messages: AsyncGenerator[Message]) -> None:
         self.messages = messages
         self.subscribe = AsyncMock()
+        # aiomqtt stores the underlying paho client here; the handler sets its
+        # connect timeout before connecting.
+        self._client = self._Paho()
 
     async def __aenter__(self) -> "FakeClient":
         return self
@@ -308,6 +315,29 @@ async def test_mqtt_handler_propagates_cancellation(
         await task
 
     assert clictx.mqttclients == set()
+
+
+@pytest.mark.asyncio
+async def test_mqtt_handler_caps_connect_timeout(
+    clictx: CliContext, mocker: MockerFixture
+) -> None:
+    client = FakeClient(_forever_after())
+    mocker.patch("tcboard.cli.squoremqtt.Client", return_value=client)
+
+    task = asyncio.create_task(
+        _mqtt_handler(
+            clictx,
+            "broker",
+            1883,
+            SQUORE_MATCH_MQTT_TOPIC,
+            SQUORE_DEVINFO_MQTT_TOPIC,
+            ignore_retained=False,
+        )
+    )
+    await wait_until(lambda: any("MQTT listener" in c for c in clictx.mqttclients))
+    await cancel(task)
+
+    assert client._client.connect_timeout == MQTT_CONNECT_TIMEOUT
 
 
 # --- listen_for_mqtt_messages and plugin -----------------------------------
