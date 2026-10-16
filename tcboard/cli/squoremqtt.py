@@ -162,6 +162,7 @@ async def _mqtt_handler(
 
     except asyncio.CancelledError:
         logger.debug("MQTT listener exiting…")
+        raise
 
 
 @asynccontextmanager

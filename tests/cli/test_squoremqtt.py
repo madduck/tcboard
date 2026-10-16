@@ -281,6 +281,35 @@ async def test_mqtt_handler_no_mqtt_error_non_refused(
     await cancel(task)
 
 
+@pytest.mark.asyncio
+async def test_mqtt_handler_propagates_cancellation(
+    clictx: CliContext, mocker: MockerFixture
+) -> None:
+    # aiomqtt runs the blocking connect in a thread that asyncio cannot cancel;
+    # the handler must not swallow the resulting CancelledError, or a shutdown
+    # during the initial connect would not propagate through the task tree.
+    client = FakeClient(_forever_after())
+    mocker.patch("tcboard.cli.squoremqtt.Client", return_value=client)
+
+    task = asyncio.create_task(
+        _mqtt_handler(
+            clictx,
+            "broker",
+            1883,
+            SQUORE_MATCH_MQTT_TOPIC,
+            SQUORE_DEVINFO_MQTT_TOPIC,
+            ignore_retained=False,
+        )
+    )
+    await wait_until(lambda: any("MQTT listener" in c for c in clictx.mqttclients))
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert clictx.mqttclients == set()
+
+
 # --- listen_for_mqtt_messages and plugin -----------------------------------
 
 
