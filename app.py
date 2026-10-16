@@ -137,10 +137,10 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
     ]
 
     try:
-        async with AsyncExitStack() as stack:
-            tasks = await setup_plugins(factories, stack=stack, clictx=clictx)
+        try:
+            async with AsyncExitStack() as stack:
+                tasks = await setup_plugins(factories, stack=stack, clictx=clictx)
 
-            try:
                 async with asyncio.TaskGroup() as tg:
                     plugin_task = partial(
                         create_plugin_task, create_task_fn=tg.create_task
@@ -153,8 +153,8 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
                     yield
                     raise asyncio.CancelledError
 
-            except asyncio.CancelledError:
-                logger.info("Exiting…")
+        except asyncio.CancelledError:
+            logger.info("Exiting…")
 
     except* RuntimeError:
         logger.exception("A runtime error occurred")
