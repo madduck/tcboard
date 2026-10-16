@@ -1,4 +1,4 @@
-/.pytest_cache
+/.*_cache
 __pycache__
 /.stfolder
 .*.sw?
