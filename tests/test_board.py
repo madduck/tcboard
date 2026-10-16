@@ -322,22 +322,6 @@ async def test_livedata_validation_error_is_recorded(
 
 
 # ---------------------------------------------------------------------------
-# process_deviceinfo (still contains a debugger trap, see fake_ipdb)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_process_deviceinfo_posts_update(
-    tcboard: TCBoard, fake_ipdb: MagicMock, mocker: MockerFixture
-) -> None:
-    post = mocker.patch.object(tcboard, "_post_update", new=AsyncMock())
-    post.side_effect = None
-    mocker.patch.object(TCBoard, "_post_update", new=AsyncMock())
-    await tcboard.process_deviceinfo(DeviceInfo(deviceid="dev"))
-    fake_ipdb.set_trace.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
 # ack / reset / clear
 # ---------------------------------------------------------------------------
 

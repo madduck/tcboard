@@ -26,6 +26,7 @@ from tcboard.cli.debug import debug_key_press_handler
 from tcboard.cli.main import (
     make_app,
     on_board_update,
+    process_squore_devinfo,
     process_squore_livedata,
     receive_tournament,
 )
@@ -132,6 +133,7 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
         tptools,
         receive_tournament,
         process_squore_livedata,
+        process_squore_devinfo,
         squoremqtt_client,
         remote_control,
         configure_for_websockets,

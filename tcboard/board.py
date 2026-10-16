@@ -12,6 +12,7 @@ import ipdb
 from pydantic import (
     UUID4,
     SerializerFunctionWrapHandler,
+    ValidationError,
     ValidatorFunctionWrapHandler,
     field_serializer,
     field_validator,
@@ -28,6 +29,7 @@ from .exceptions import (
     TCBoardException,
     TournamentNotLoaded,
 )
+from .ext.squore.devinfo import SquoreDeviceInfo
 from .livedata import LiveData
 from .matchslot import MatchSlot
 from .matchstate import MatchState
@@ -131,25 +133,35 @@ class TCBoard(BaseModel[None]):
                 await self._post_update()
         return None
 
-    async def process_deviceinfo(self, devinfo: DeviceInfo) -> None | Never:
-        logger.debug(f"Processing device info: {devinfo}")
+    async def process_squore_deviceinfo(
+        self, devinfo: SquoreDeviceInfo
+    ) -> None | Never:
+        logger.debug(f"Processing device info: {devinfo!r}")
 
-        # TODO: HERE
-        import ipdb
+        if (
+            devinfo.deviceid is not None
+            and devinfo.customData is not None
+            and (courtdata := devinfo.customData.get("court")) is not None
+        ):
+            court = None
+            try:
+                court = Court.model_validate(courtdata)
 
-        ipdb.set_trace()  # noqa: E402 E702 I001 # fmt: skip
-        # self._devinfobuffer.append(devinfo)
-        #
-        # for match in tournament.get_matches(
-        #     include_played=True, include_not_ready=True
-        # ):
-        #     if match.id not in self.matchstates_by_matchid:
-        #         self.matchstates_by_matchid[match.id] = MatchState(match=match)
-        #
-        # for buffered in self._livedatabuffer:
-        #     await self.process_squore_livedata(buffered)
-        # else:
-        #     self._livedatabuffer.clear()
+            except ValidationError:
+                try:
+                    if self.tournament is not None:
+                        court = self.tournament.courts[courtdata["id"]]
+
+                except KeyError:
+                    logger.warning(f"Cannot resolve court of device info: {devinfo!r}")
+
+            if court is not None:
+                if devinfo.deviceid not in self.court_by_deviceid:
+                    logger.info(
+                        f"Recording device {devinfo.deviceid} for court {court}"
+                    )
+                    self.court_by_deviceid[devinfo.deviceid] = court
+                    self.set_scoredev_for_court(court, devinfo.deviceid)
 
         await self._post_update()
         return None

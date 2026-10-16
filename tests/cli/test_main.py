@@ -258,7 +258,7 @@ async def test_process_squore_livedata_forwards_updates_to_board(
 async def test_process_squore_devinfo_forwards_updates_to_board(
     clictx: CliContext, mocker: MockerFixture, fake_ipdb: MagicMock
 ) -> None:
-    process = mocker.patch.object(TCBoard, "process_deviceinfo", new=AsyncMock())
+    process = mocker.patch.object(TCBoard, "process_squore_deviceinfo", new=AsyncMock())
     sentinel = object()
     async with process_squore_devinfo(clictx) as task:
         pump = asyncio.create_task(task)  # type: ignore[arg-type]

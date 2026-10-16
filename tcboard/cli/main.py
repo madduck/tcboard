@@ -33,8 +33,7 @@ from tptools import VERSION as TPTOOLS_VERSION
 from tptools.util import silence_logger
 
 from tcboard import VERSION, TCBoard, TCTournament
-from tcboard.devinfo import DeviceInfo
-from tcboard.ext.squore.livedata import SquoreMatchLiveData
+from tcboard.ext.squore import SquoreDeviceInfo, SquoreMatchLiveData
 
 from .util import CliContext, pass_clictx
 
@@ -136,10 +135,12 @@ async def process_squore_livedata(clictx: CliContext) -> PluginLifespan:
 @asynccontextmanager
 async def process_squore_devinfo(clictx: CliContext) -> PluginLifespan:
     updates_gen = cast(
-        AsyncGenerator[DeviceInfo],
+        AsyncGenerator[SquoreDeviceInfo],
         clictx.itc.updates("squoredevinfo", yield_immediately=True),
     )
-    yield react_to_data_update(updates_gen, callback=clictx.board.process_deviceinfo)
+    yield react_to_data_update(
+        updates_gen, callback=clictx.board.process_squore_deviceinfo
+    )
 
 
 boardlogger = logging.getLogger(__name__ + ".board")
@@ -247,7 +248,7 @@ def runit(
 
     plugin_factories.append(partial(receive_tournament, clictx))
     plugin_factories.append(partial(process_squore_livedata, clictx))
-    # plugin_factories.append(partial(process_squore_devinfo, clictx))
+    plugin_factories.append(partial(process_squore_devinfo, clictx))
 
     # We do not use FastAPI's/Starlette's lifespan because of
     # https://github.com/fastapi/fastapi/discussions/13878
