@@ -136,6 +136,31 @@ The `api` plugin serves its endpoints under `/api/v1`:
 
 The `ws` plugin serves board data at `/ws/v1/`. When a client connects, it first receives a welcome message with the JSON schema of the board and the base URL of the API. After that it receives the board whenever it changes. A client can subscribe to particular courts with the `court` query parameter, and can limit how often it is updated with `timeout` and `at_most_every`. The schema alone is available at `/ws/v1/schema`.
 
+The names of players, clubs, countries, courts and draws are rendered when the board is sent, and every client can influence how that happens by passing query string parameters on the WebSocket URL. These are the same parameters that [tptools](https://github.com/madduck/tptools) accepts on its Squore endpoints, and the [tptools README](https://github.com/madduck/tptools#the-squore-endpoints) documents them in full. Passing them to a `tcboard` URL has the desired effect, because `tcboard` hands them down the WebSocket pipe to the same policy code.
+
+The parameters are grouped by the thing they affect:
+
+| Group    | Parameters                                                          |
+|----------|---------------------------------------------------------------------|
+| Players  | `namejoinstr`, `fnamemaxlen`, `abbrjoinstr`, `lnamefirst`, `include_club`, `include_country` |
+| Teams    | `teamjoinstr`, `merge_identical`                                    |
+| Courts   | `include_location`, `no_court_string`                               |
+| Draws    | `only_show_event`                                                   |
+| Countries| `titlecase`, `use_country_code`                                     |
+
+See the [tptools README](https://github.com/madduck/tptools#the-squore-endpoints) for the type, effect and default of each parameter.
+
+In addition to those, `tcboard` defines the following parameters of its own:
+
+| Parameter          | Type    | Effect                                                                 | Default |
+|--------------------|---------|------------------------------------------------------------------------|---------|
+| `court`            | integer | Only send the boards of these courts; may be given more than once       | all     |
+| `timeout`          | number  | Seconds after which an unchanged board is sent again                    | none    |
+| `at_most_every`    | number  | Minimum number of seconds between two boards sent to this client        | none    |
+| `shortfnamelen`    | integer | Maximum number of characters to display of a player's first name in the short name | 1       |
+
+`shortfnamelen` only affects the short name (`shortname`) of a player. The full name (`name`) keeps using `fnamemaxlen`, so a client can show both a full and an abbreviated form of the same name.
+
 The `tptools` plugin serves `POST /tptools/v1/tournament` for tournament data, and `POST /tptools/v1/squore/result` for match results posted from a tablet.
 
 The application also answers `/` with a short status line, `/favicon.ico`, and `/robots.txt`, which asks all crawlers to stay away. The `/debug/board` and `/debug/match/{matchid}` endpoints return the current state as JSON.
