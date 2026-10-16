@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.datastructures import URL, Address, Headers
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from starlette.websockets import WebSocketDisconnect
 from tptools import Court
@@ -30,11 +31,13 @@ from tcboard.cli.ws import (
     WS_PATH_VERSION,
     CourtData,
     DisplayData,
+    PlayerShortNamePolicyParams,
     WSHandler,
     configure_for_websockets,
     get_dev_map,
     get_devmap_path,
     get_drawnamepolicy,
+    get_playershortnamepolicy,
     get_remote,
     get_schema,
     get_websocket_peer,
@@ -103,14 +106,21 @@ def default_policies() -> dict[str, Any]:
         "drawnamepolicy": DrawNamePolicy(),
         "courtnamepolicy": CourtNamePolicy(),
         "playernamepolicy": PlayerNamePolicy(),
+        "playershortnamepolicy": PlayerNamePolicy(),
         "paircombinepolicy": PairCombinePolicy(),
         "countrynamepolicy": CountryNamePolicy(),
         "clubnamepolicy": ClubNamePolicy(),
     }
 
 
-def start_endpoint(ws: FakeWebSocket, handler: WSHandler) -> asyncio.Task[None]:
-    return asyncio.create_task(ws_endpoint(ws, handler, **default_policies()))  # type: ignore[arg-type]
+def start_endpoint(
+    ws: FakeWebSocket,
+    handler: WSHandler,
+    policies: dict[str, Any] | None = None,
+) -> asyncio.Task[None]:
+    return asyncio.create_task(
+        ws_endpoint(ws, handler, **(policies or default_policies()))  # type: ignore[arg-type]
+    )
 
 
 async def end_session(ws: FakeWebSocket, task: asyncio.Task[None]) -> None:
@@ -234,6 +244,31 @@ def test_get_drawnamepolicy_builds_policy() -> None:
     assert isinstance(policy, DrawNamePolicy)
 
 
+def test_get_playershortnamepolicy_uses_shortfnamelen() -> None:
+    policy = get_playershortnamepolicy(
+        PlayerNamePolicy(), PlayerShortNamePolicyParams(shortfnamelen=3)
+    )
+    assert isinstance(policy, PlayerNamePolicy)
+    assert policy.fnamemaxlen == 3
+
+
+def test_get_playershortnamepolicy_defaults_to_single_char() -> None:
+    policy = get_playershortnamepolicy(
+        PlayerNamePolicy(), PlayerShortNamePolicyParams()
+    )
+    assert policy.fnamemaxlen == 1
+
+
+def test_get_playershortnamepolicy_keeps_other_params() -> None:
+    policy = get_playershortnamepolicy(
+        PlayerNamePolicy(fnamemaxlen=42, lnamefirst=True),
+        PlayerShortNamePolicyParams(),
+    )
+    # the short policy overrides fnamemaxlen, but must inherit the rest
+    assert policy.fnamemaxlen == 1
+    assert policy.lnamefirst is True
+
+
 def test_courtdata_exposes_court_id(court1: Court) -> None:
     cd = CourtData(court=court1, label="Court A")
     dumped = cd.model_dump()
@@ -345,6 +380,28 @@ async def test_wshandler_send_data_respects_courtids(
     assert len(ws.sent_text) == 1
     courtids = [cs["courtid"] for cs in json.loads(ws.sent_text[0])["courtstates"]]
     assert courtids == [2]
+
+
+@pytest.mark.asyncio
+async def test_wshandler_send_data_forwards_shortname_policy(
+    wsclictx: CliContext, mocker: MockerFixture
+) -> None:
+    ws = FakeWebSocket(wsclictx.api)
+    handler = WSHandler()
+    playernamepolicy = PlayerNamePolicy()
+    playershortnamepolicy = PlayerNamePolicy()
+    data = mocker.MagicMock(spec=BaseModel)
+
+    async with handler.accept(ws):  # type: ignore[arg-type]
+        await handler.send_data(
+            data,
+            playernamepolicy=playernamepolicy,
+            playershortnamepolicy=playershortnamepolicy,
+        )
+
+    context = data.model_dump_json.call_args.kwargs["context"]
+    assert context["playernamepolicy"] is playernamepolicy
+    assert context["playershortnamepolicy"] is playershortnamepolicy
 
 
 @pytest.mark.asyncio
@@ -511,6 +568,26 @@ async def test_endpoint_filters_courts(
     payload = json.loads(wsocket.sent_text[0])
     courtids = [cs["courtid"] for cs in payload["courtstates"]]
     assert courtids == [1]
+    await end_session(wsocket, task)
+
+
+@pytest.mark.asyncio
+async def test_endpoint_applies_shortname_policy(
+    wsclictx: CliContext, wsocket: FakeWebSocket, mocker: MockerFixture
+) -> None:
+    playernamepolicy = PlayerNamePolicy()
+    playershortnamepolicy = PlayerNamePolicy()
+    send = mocker.patch.object(WSHandler, "send_data", autospec=True, return_value=None)
+    policies = default_policies()
+    policies["playernamepolicy"] = playernamepolicy
+    policies["playershortnamepolicy"] = playershortnamepolicy
+
+    task = start_endpoint(wsocket, WSHandler(), policies=policies)
+    await wait_until(lambda: send.call_count >= 1)
+
+    assert send.call_args.kwargs["playernamepolicy"] is playernamepolicy
+    assert send.call_args.kwargs["playershortnamepolicy"] is playershortnamepolicy
+
     await end_session(wsocket, task)
 
 

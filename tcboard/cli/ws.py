@@ -39,6 +39,7 @@ from tptools.namepolicy import (
     PairCombinePolicy,
     PlayerNamePolicy,
 )
+from tptools.paramsmodel import ParamsModel
 from tptools.tpsrv.squoresrv import (
     get_clubnamepolicy,
     get_countrynamepolicy,
@@ -65,6 +66,17 @@ logger = logging.getLogger(__name__)
 
 
 wsapp = FastAPI()
+
+
+class PlayerShortNamePolicyParams(ParamsModel):
+    shortfnamelen: int = 1
+
+
+def get_playershortnamepolicy(
+    playernamepolicy: Annotated[PlayerNamePolicy, Depends(get_playernamepolicy)],
+    shortpolicyparams: Annotated[PlayerShortNamePolicyParams, Query()],
+) -> PlayerNamePolicy:
+    return playernamepolicy.with_(fnamemaxlen=shortpolicyparams.shortfnamelen)
 
 
 async def listen_for_data_from_client(websocket: WebSocket) -> AsyncGenerator[str]:
@@ -255,6 +267,7 @@ class WSHandler:
         clubnamepolicy: ClubNamePolicy | None = None,
         countrynamepolicy: CountryNamePolicy | None = None,
         playernamepolicy: PlayerNamePolicy | None = None,
+        playershortnamepolicy: PlayerNamePolicy | None = None,
         paircombinepolicy: PairCombinePolicy | None = None,
     ) -> None | Never:
         if self._websocket is None:
@@ -270,6 +283,7 @@ class WSHandler:
                     "clubnamepolicy": clubnamepolicy,
                     "countrynamepolicy": countrynamepolicy,
                     "playernamepolicy": playernamepolicy,
+                    "playershortnamepolicy": playershortnamepolicy,
                     "paircombinepolicy": paircombinepolicy,
                 }
             )
@@ -363,6 +377,9 @@ async def websocket(
     drawnamepolicy: Annotated[DrawNamePolicy, Depends(get_drawnamepolicy)],
     courtnamepolicy: Annotated[CourtNamePolicy, Depends(get_courtnamepolicy)],
     playernamepolicy: Annotated[PlayerNamePolicy, Depends(get_playernamepolicy)],
+    playershortnamepolicy: Annotated[
+        PlayerNamePolicy, Depends(get_playershortnamepolicy)
+    ],
     paircombinepolicy: Annotated[PairCombinePolicy, Depends(get_paircombinepolicy)],
     countrynamepolicy: Annotated[CountryNamePolicy, Depends(get_countrynamepolicy)],
     clubnamepolicy: Annotated[ClubNamePolicy, Depends(get_clubnamepolicy)],
@@ -424,6 +441,7 @@ async def websocket(
                     clubnamepolicy=clubnamepolicy,
                     countrynamepolicy=countrynamepolicy,
                     playernamepolicy=playernamepolicy,
+                    playershortnamepolicy=playershortnamepolicy,
                     paircombinepolicy=paircombinepolicy,
                 )
 

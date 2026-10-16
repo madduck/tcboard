@@ -25,11 +25,15 @@ class TCMatch(Match):
         clubnamepolicy: ClubNamePolicy | None = None,
         countrynamepolicy: CountryNamePolicy | None = None,
         playernamepolicy: PlayerNamePolicy | None = None,
+        playershortnamepolicy: PlayerNamePolicy | None = None,
         paircombinepolicy: PairCombinePolicy | None = None,
     ) -> PlayersTuple:
         clubnamepolicy = clubnamepolicy or ClubNamePolicy()
         countrynamepolicy = countrynamepolicy or CountryNamePolicy()
         playernamepolicy = playernamepolicy or PlayerNamePolicy()
+        playershortnamepolicy = playershortnamepolicy or playernamepolicy.with_(
+            fnamemaxlen=1
+        )
         paircombinepolicy = paircombinepolicy or PairCombinePolicy()
 
         def make_tcplayer(entry: Entry | str) -> TCPlayer:
@@ -46,7 +50,7 @@ class TCMatch(Match):
             )
             return TCPlayer(
                 shortname=entry.get_player_name(
-                    playernamepolicy=playernamepolicy.with_(fnamemaxlen=1),
+                    playernamepolicy=playershortnamepolicy,
                     paircombinepolicy=paircombinepolicy,
                 ),
                 **expplayer,  # type: ignore[typeddict-item]
@@ -68,6 +72,9 @@ class TCMatch(Match):
         playernamepolicy: PlayerNamePolicy = ctx.get(
             "playernamepolicy", PlayerNamePolicy()
         )
+        playershortnamepolicy: PlayerNamePolicy = ctx.get(
+            "playershortnamepolicy", playernamepolicy.with_(fnamemaxlen=1)
+        )
         paircombinepolicy: PairCombinePolicy = ctx.get(
             "paircombinepolicy", PairCombinePolicy()
         )
@@ -75,6 +82,7 @@ class TCMatch(Match):
             clubnamepolicy=clubnamepolicy,
             countrynamepolicy=countrynamepolicy,
             playernamepolicy=playernamepolicy,
+            playershortnamepolicy=playershortnamepolicy,
             paircombinepolicy=paircombinepolicy,
         )
 
