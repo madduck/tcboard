@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from starlette.websockets import WebSocketDisconnect
-from tptools import Court
+from tptools import Court, DeviceCourtMap
 from tptools.namepolicy import (
     ClubNamePolicy,
     CountryNamePolicy,
@@ -347,10 +347,29 @@ def test_wshandler_events_without_stream_is_empty() -> None:
 
 
 def test_wshandler_make_instance() -> None:
-    handler = WSHandler.make_instance(court=[1, 2], timeout=0.5, at_most_every=1.0)
+    handler = WSHandler.make_instance(
+        court=[1, 2],
+        timeout=0.5,
+        at_most_every=1.0,
+        dev_map=DeviceCourtMap(),
+        clientip=None,
+        courts=[],
+    )
     assert handler.courtids == [1, 2]
     assert handler.timeout == 0.5
     assert handler.at_most_every == 1.0
+
+
+def test_wshandler_make_instance_dev_to_court_map(court1: Court) -> None:
+    dev_map = DeviceCourtMap()
+    dev_map.add_devcourt_mapping("192.0.2.1", "court1")
+
+    handler = WSHandler.make_instance(
+        dev_map=dev_map,
+        clientip="192.0.2.1",
+        courts=[court1],
+    )
+    assert handler.courtids and court1.id in handler.courtids
 
 
 @pytest.mark.asyncio

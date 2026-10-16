@@ -54,6 +54,7 @@ from tcboard.exceptions import TournamentNotLoaded
 
 from .util import (
     CliContext,
+    get_courts,
     pass_clictx,
 )
 
@@ -293,16 +294,16 @@ class WSHandler:
     @classmethod
     def make_instance(
         cls,
-        # dev_map: Annotated[DeviceCourtMap, Depends(get_dev_map)],
-        # clientip: Annotated[str | None, Depends(get_remote)],
-        # courts: Annotated[list[Court], Depends(get_courts)],
+        dev_map: Annotated[DeviceCourtMap, Depends(get_dev_map)],
+        clientip: Annotated[str | None, Depends(get_remote)],
+        courts: Annotated[list[Court], Depends(get_courts)],
         court: Annotated[list[int] | None, Query()] = None,
         timeout: float | None = None,
         at_most_every: float | None = None,
     ) -> Self:
-        # if not court and clientip is not None:
-        #     if (c := dev_map.find_court_for_ip(clientip, courts=courts)) is not None:
-        #         court = [c.id]
+        if not court and clientip is not None:
+            if (c := dev_map.find_court_for_ip(clientip, courts=courts)) is not None:
+                court = [c.id]
 
         return cls(
             courtids=court,

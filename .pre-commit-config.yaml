@@ -13,7 +13,7 @@ repos:
           - starlette
           - pytest
           - pytest-asyncio
-          - tptools (>= 0.7.3)
+          - tptools (>= 0.7.4)
           - squoredata (>= 0.2.0)
           - click-async-plugins (>= 0.7.4)
   - repo: https://github.com/astral-sh/ruff-pre-commit
