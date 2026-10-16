@@ -13,6 +13,7 @@ from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
 from .. import TCTournament
 from ..ext.squore import SquoreMatch
+from .squoremqtt import MQTT_CONNECT_TIMEOUT
 from .util import CliContext, pass_clictx
 
 SQUORE_REMOTE_CONTROL_TOPIC = "double-yellow/Squore/%c/remoteControl"
@@ -101,29 +102,27 @@ async def remote_control_loop(
                 )
 
 
-@asynccontextmanager
-async def remote_control_publisher(
+async def _remote_control_handler(
     clictx: CliContext,
-    *,
-    remotectrl_topic: str = SQUORE_REMOTE_CONTROL_TOPIC,
+    server: str,
+    port: int,
+    remotectrl_topic: str,
     retry_sleep: int = 2,
-) -> PluginLifespan:
-    if clictx.mqtthost is not None:
-        server, port = clictx.mqtthost.host, clictx.mqtthost.port
-    else:
-        raise ValueError("CliContext.mqtthost is unset")
-
+) -> None:
     connstr = f"MQTT sender on {remotectrl_topic} to {server}:{port}"
     logger.debug(f"Starting {connstr}")
-
     try:
         while True:
             try:
-                async with Client(server, port) as client:
+                client = Client(server, port)
+                # See squoremqtt: aiomqtt runs paho's blocking connect in a
+                # thread that asyncio cannot cancel, so cap how long it blocks.
+                client._client.connect_timeout = MQTT_CONNECT_TIMEOUT
+                async with client:
                     logger.debug(f"Connected {connstr}")
                     clictx.mqttclients.add(connstr)
 
-                    yield remote_control_loop(clictx, client, remotectrl_topic)
+                    await remote_control_loop(clictx, client, remotectrl_topic)
 
             except MqttError as exc:
                 if "Connection refused" in exc.args[0]:
@@ -140,6 +139,22 @@ async def remote_control_publisher(
 
     except asyncio.CancelledError:
         logger.debug("MQTT client exiting…")
+        raise
+
+
+@asynccontextmanager
+async def remote_control_publisher(
+    clictx: CliContext,
+    *,
+    remotectrl_topic: str = SQUORE_REMOTE_CONTROL_TOPIC,
+    retry_sleep: int = 2,
+) -> PluginLifespan:
+    if clictx.mqtthost is not None:
+        server, port = clictx.mqtthost.host, clictx.mqtthost.port
+    else:
+        raise ValueError("CliContext.mqtthost is unset")
+
+    yield _remote_control_handler(clictx, server, port, remotectrl_topic, retry_sleep)
 
 
 @plugin

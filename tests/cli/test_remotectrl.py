@@ -26,8 +26,14 @@ from .conftest import cancel, close_if_coro, wait_until
 
 
 class FakeClient:
+    class _Paho:
+        connect_timeout: float = 0.0
+
     def __init__(self) -> None:
         self.publish = AsyncMock()
+        # aiomqtt stores the underlying paho client here; the handler sets its
+        # connect timeout before connecting.
+        self._client = self._Paho()
 
     async def __aenter__(self) -> "FakeClient":
         return self
@@ -173,12 +179,6 @@ async def test_remote_control_loop_warns_on_unexpected_event(
 # --- remote_control_publisher ----------------------------------------------
 
 
-async def _enter_and_cancel(clictx: CliContext) -> None:
-    async with remote_control_publisher(clictx) as task:
-        close_if_coro(task)
-        raise asyncio.CancelledError
-
-
 @pytest.mark.asyncio
 async def test_publisher_requires_mqtthost(clictx: CliContext) -> None:
     assert clictx.mqtthost is None
@@ -188,28 +188,40 @@ async def test_publisher_requires_mqtthost(clictx: CliContext) -> None:
 
 
 @pytest.mark.asyncio
-async def test_publisher_retries_and_yields_loop(
+async def test_publisher_yields_the_connect_loop(clictx: CliContext) -> None:
+    clictx.mqtthost = Address("broker", 1883)
+
+    async with remote_control_publisher(clictx, remotectrl_topic="t/%c") as task:
+        # The connect loop must be deferred into the yielded task, so that
+        # setup_plugins() cannot block on the MQTT connect.
+        assert asyncio.iscoroutine(task)
+        close_if_coro(task)
+
+
+@pytest.mark.asyncio
+async def test_handler_retries_until_connected(
     clictx: CliContext, mocker: MockerFixture
 ) -> None:
     clictx.mqtthost = Address("broker", 1883)
     error = mocker.patch("tcboard.cli.remotectrl.logger.error")
     warn = mocker.patch("tcboard.cli.remotectrl.logger.warning")
+    working = FakeClient()
     mocker.patch(
         "tcboard.cli.remotectrl.Client",
         side_effect=[
             MqttError("Connection refused"),
             MqttError("dropped"),
-            FakeClient(),
+            working,
         ],
     )
 
-    with pytest.raises(RuntimeError, match="stop"):
-        async with remote_control_publisher(
-            clictx, remotectrl_topic="t/%c", retry_sleep=0
-        ) as task:
-            assert asyncio.iscoroutine(task)
-            close_if_coro(task)
-            raise RuntimeError("stop")
+    async with remote_control_publisher(
+        clictx, remotectrl_topic="t/%c", retry_sleep=0
+    ) as task:
+        assert asyncio.iscoroutine(task)
+        handler = asyncio.create_task(task)
+        await wait_until(lambda: any("MQTT sender" in c for c in clictx.mqttclients))
+        await cancel(handler)
 
     error.assert_called_once()
     assert "broker not running" in error.call_args.args[0]
@@ -218,16 +230,22 @@ async def test_publisher_retries_and_yields_loop(
 
 
 @pytest.mark.asyncio
-async def test_publisher_exits_cleanly_when_cancelled(
+async def test_handler_propagates_cancellation(
     clictx: CliContext, mocker: MockerFixture
 ) -> None:
     clictx.mqtthost = Address("broker", 1883)
     mocker.patch("tcboard.cli.remotectrl.Client", return_value=FakeClient())
-    debug = mocker.patch("tcboard.cli.remotectrl.logger.debug")
 
-    await _enter_and_cancel(clictx)
+    async with remote_control_publisher(clictx, remotectrl_topic="t/%c") as task:
+        assert asyncio.iscoroutine(task)
+        handler = asyncio.create_task(task)
+        await wait_until(lambda: any("MQTT sender" in c for c in clictx.mqttclients))
 
-    assert any("exiting" in c.args[0] for c in debug.call_args_list)
+        handler.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await handler
+
+    assert clictx.mqttclients == set()
 
 
 # --- remotectrl plugin ------------------------------------------------------
@@ -240,9 +258,6 @@ async def test_remotectrl_plugin_starts_from_cli(
     clictx.mqtthost = Address("broker", 1883)
     mocker.patch("tcboard.cli.remotectrl.Client", return_value=FakeClient())
 
-    # The body loops reconnecting forever once it is exited normally, so leave
-    # it via an exception, which the publisher does not swallow.
-    with pytest.raises(RuntimeError, match="stop"):
-        async with run_plugin(remotectrl_plugin, []) as task:
-            close_if_coro(task)
-            raise RuntimeError("stop")
+    async with run_plugin(remotectrl_plugin, []) as task:
+        assert asyncio.iscoroutine(task)
+        close_if_coro(task)
