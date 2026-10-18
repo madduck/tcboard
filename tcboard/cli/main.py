@@ -298,12 +298,18 @@ def runit(
         for e in exc.exceptions:
             raise e from exc
 
-    except* Exception:
-        import ipdb
-
+    except* Exception as exc:
         clilogger.exception("Something went really wrong")
 
-        ipdb.set_trace()  # noqa: E402 E702 I001 # fmt: skip
+        try:
+            import ipdb
+
+        except ImportError:  # pragma: nocover
+            pass
+
+        else:
+            _ = exc
+            ipdb.set_trace()  # noqa: E402 E702 I001 # fmt: skip
 
         _exit(1)
 
