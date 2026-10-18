@@ -1,8 +1,8 @@
 import itertools
 from datetime import datetime
-from typing import Never
+from typing import Any, Never
 
-from pydantic import computed_field
+from pydantic import computed_field, field_validator
 from squoredata import (
     SquoreMatchLiveData as SquoreMatchLiveDataBase,
 )
@@ -42,6 +42,21 @@ class SquoreMatchLiveData(LiveData, SquoreMatchLiveDataBase):
     ``Point`` and ``LiveStatus`` types, so they are overridden here, together
     with the ``LiveData`` accessors the squoredata model leaves out.
     """
+
+    court: int | None  # type: ignore[assignment]
+
+    # Intentional override here. Squore sends strings for courts,
+    # but we use integers internally.
+
+    @field_validator("court", mode="before")
+    @classmethod
+    def _coerce_to_int_or_none(cls, v: Any) -> int | None:
+        if v == "null":
+            # https://github.com/obbimi/Squore/issues/96
+            return None
+        elif not isinstance(v, int):
+            return int(v)
+        return v
 
     @property
     def matchid(self) -> str:

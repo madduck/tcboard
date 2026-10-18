@@ -26,7 +26,7 @@ classifiers = [
 
 dependencies = [
   "tptools (>= 0.7.4)",
-  "squoredata (>= 0.2.0)",
+  "squoredata (>= 0.3.0)",
   "pydantic",
   "uvloop; sys_platform == 'linux'",
   "click",

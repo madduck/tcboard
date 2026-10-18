@@ -14,7 +14,7 @@ repos:
           - pytest
           - pytest-asyncio
           - tptools (>= 0.7.4)
-          - squoredata (>= 0.2.0)
+          - squoredata (>= 0.3.0)
           - click-async-plugins (>= 0.7.4)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.10
