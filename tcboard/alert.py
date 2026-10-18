@@ -5,13 +5,17 @@ import traceback
 import uuid
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Self, cast
+from typing import Any, Protocol, Self, cast
 
 from pydantic import (
     UUID4,
     BaseModel,
     Field,
 )
+
+
+class AlertClearCallback(Protocol):
+    def __call__(self, alert: Alert, timestamp: datetime) -> None: ...
 
 
 class Alert(BaseModel):
@@ -27,6 +31,7 @@ class Alert(BaseModel):
     def model_post_init(self, _: Any) -> None:
         if self.timestamp is None:
             self.timestamp = datetime.now()
+        self._clear_callback: AlertClearCallback | None = None
 
     @classmethod
     def from_exception(cls, exc: Exception, **kwargs: Any) -> Self:
@@ -39,8 +44,13 @@ class Alert(BaseModel):
             return None
         return "\n".join(traceback.format_tb(tback))
 
+    def set_clear_callback(self, callback: AlertClearCallback) -> None:
+        self._clear_callback = callback
+
     def clear(self, timestamp: datetime | None = None) -> None:
         self.cleared = timestamp if timestamp is not None else datetime.now()
+        if callable(self._clear_callback):
+            self._clear_callback(self, self.cleared)
 
     def __hash__(self) -> int:
         return hash((self.text, self.matchid, self.cleared))

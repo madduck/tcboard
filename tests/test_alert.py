@@ -1,8 +1,9 @@
 from datetime import datetime
 
 import pytest
+from pytest_mock import MockerFixture
 
-from tcboard.alert import Alert
+from tcboard.alert import Alert, AlertClearCallback
 
 
 def test_no_timestamp_means_now(alert: Alert) -> None:
@@ -13,6 +14,15 @@ def test_clear(alert: Alert) -> None:
     assert not alert.cleared
     alert.clear()
     assert alert.cleared
+
+
+def test_clear_callback(alert: Alert, mocker: MockerFixture) -> None:
+    callback = mocker.MagicMock(spec=AlertClearCallback)
+    alert.set_clear_callback(callback)
+    alert.clear()
+    callback.assert_called_once()
+    assert callback.call_args.args[0] == alert
+    assert isinstance(callback.call_args.args[1], datetime)
 
 
 TESTS = [
