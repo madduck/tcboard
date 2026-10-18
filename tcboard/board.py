@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Iterable, MutableMapping, Never, Protocol, cast
 
-import ipdb
 from pydantic import (
     UUID4,
     SerializerFunctionWrapHandler,
@@ -20,6 +19,8 @@ from pydantic import (
 from tabulate import tabulate
 from tptools import Court, MatchStatus
 from tptools.basemodel import BaseModel
+
+from tcboard.match import TCMatch
 
 from .alert import Alert
 from .courtstate import CourtState
@@ -171,6 +172,26 @@ class TCBoard(BaseModel[None]):
             self.tournament.courts[court.id].scoredev = devid
         return None
 
+    def _maybe_debug_match(self, match: TCMatch) -> None:
+        if match.id not in self.debug_match_ids:
+            return
+
+        try:
+            import ipdb
+
+        except ImportError:  # pragma: nocover
+            logger.warn(f"Cannot debug match {match.id}, ipdb is not installed")
+
+        else:
+            import inspect
+
+            if (frame := inspect.currentframe()) is not None:
+                ipdb.set_trace(frame.f_back)
+
+            else:  # pragma: nocover
+                logger.error("Unable to find frame, starting debugger without…")
+                ipdb.set_trace()
+
     async def process_tournament(self, tournament: TCTournament) -> None | Never:
         logger.debug(f"Processing {tournament.__class__.__name__}: {tournament}")
         self.tournament = tournament
@@ -184,7 +205,7 @@ class TCBoard(BaseModel[None]):
         for match in tournament.get_matches(
             include_played=True, include_not_ready=True
         ):
-            ipdb.set_trace(cond=match.id in self.debug_match_ids)
+            self._maybe_debug_match(match)
 
             if (ms := self.matchstates_by_matchid.get(match.id)) is None:
                 ms = MatchState(match=match)
@@ -273,7 +294,7 @@ class TCBoard(BaseModel[None]):
             # ignore error, just continue
 
         else:
-            ipdb.set_trace(cond=match.id in self.debug_match_ids)
+            self._maybe_debug_match(match)
 
             matchstate = self.matchstates_by_matchid.get(
                 data.matchid, MatchState(match=match)

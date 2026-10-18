@@ -96,8 +96,39 @@ def fake_ipdb(mocker: MockerFixture) -> MagicMock:
     """Stub out the debugger traps in board.py (they would block a test run)."""
     fake = MagicMock(name="ipdb")
     mocker.patch.dict(sys.modules, {"ipdb": fake})
-    mocker.patch("tcboard.board.ipdb", fake)
     return fake
+
+
+# ---------------------------------------------------------------------------
+# _maybe_debug_match
+# ---------------------------------------------------------------------------
+
+
+def test_maybe_debug_match_ignores_other_matches(
+    tcboard: TCBoard, match: Any, fake_ipdb: MagicMock
+) -> None:
+    tcboard.debug_match_ids = ["other"]
+    tcboard._maybe_debug_match(match)
+    fake_ipdb.set_trace.assert_not_called()
+
+
+def test_maybe_debug_match_starts_trace(
+    tcboard: TCBoard, match: Any, fake_ipdb: MagicMock
+) -> None:
+    tcboard.debug_match_ids = [match.id]
+    tcboard._maybe_debug_match(match)
+    fake_ipdb.set_trace.assert_called_once()
+    (frame,) = fake_ipdb.set_trace.call_args.args
+    assert frame is not None
+
+
+@pytest.mark.asyncio
+async def test_process_tournament_debugs_listed_match(
+    tcboard: TCBoard, tournament: TCTournament, fake_ipdb: MagicMock
+) -> None:
+    tcboard.debug_match_ids = ["0"]
+    await tcboard.process_tournament(tournament)
+    fake_ipdb.set_trace.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
