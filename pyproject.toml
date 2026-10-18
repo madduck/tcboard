@@ -31,7 +31,7 @@ dependencies = [
   "uvloop; sys_platform == 'linux'",
   "click",
   "click-extra (>= 9.4.1)",
-  "click-async-plugins (>= 0.7.4)",
+  "click-async-plugins (>= 0.9.0)",
   "fastapi",
   "uvicorn",
   "aiomqtt",
