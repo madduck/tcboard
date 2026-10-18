@@ -410,12 +410,14 @@ def test_uvicorn_records_use_our_formatter() -> None:
     try:
         root.handlers = [handler]
         root.setLevel(logging.INFO)
-        logging.getLogger("uvicorn.error").info("Application startup complete.")
+        logging.getLogger("uvicorn.error").warning("Application startup complete.")
     finally:
         root.handlers = saved_handlers
         root.setLevel(saved_level)
 
-    assert stream.getvalue() == ("INFO uvicorn.error Application startup complete.\n")
+    assert stream.getvalue() == (
+        "WARNING uvicorn.error Application startup complete.\n"
+    )
 
 
 # --- import-time fallbacks -----------------------------------------------

@@ -59,12 +59,15 @@ logger = clickx.new_logger(
     datefmt="%F %T",
     level=logging.WARNING,
 )
+boardlogger = logging.getLogger(__name__ + ".board")
+clilogger = logging.getLogger(__name__)
 
 
 def _pong(request: Request) -> str:
     client = request.headers.get(
         "X-Forwarded-For", request.client.host if request.client else None
     )
+    clilogger.info(f"Received ping from {client}")
     return (
         f"Hello {client}, tcboard {VERSION} is running "
         f"(with tptools {TPTOOLS_VERSION})!\n"
@@ -143,9 +146,6 @@ async def process_squore_devinfo(clictx: CliContext) -> PluginLifespan:
     )
 
 
-boardlogger = logging.getLogger(__name__ + ".board")
-
-
 async def on_board_update(board: TCBoard, itc: ITC, **updates: Any) -> None:
     itc.set("board", board)
     boardlogger.info("\n" + board.debug_render() + "\n")
@@ -195,6 +195,7 @@ def tcboard(
 ) -> None:
     """Collect tournament data and distribute to subscribers"""
 
+    silence_logger("uvicorn", level=logging.WARNING)
     if not very_debug:
         for name, level in (
             ("asyncio", logging.WARNING),
@@ -220,12 +221,12 @@ for plugin in PLUGINS:
         mod = importlib.import_module(f".{plugin}", __package__)
 
     except (ImportError, NotImplementedError) as exc:
-        logger.warning(f"Plugin '{plugin}' cannot be loaded: {exc}")
+        clilogger.warning(f"Plugin '{plugin}' cannot be loaded: {exc}")
 
     else:
         subcmd = getattr(mod, plugin)
         tcboard.add_command(subcmd)
-        logger.debug(f"Added plugin to tcboard: {plugin}")
+        clilogger.debug(f"Added plugin to tcboard: {plugin}")
 
 
 @tcboard.result_callback()
@@ -274,7 +275,14 @@ def runit(
                         create_plugin_task(task, create_task_fn=tg.create_task)
 
                     try:
+                        clilogger.info(
+                            "Starting server on "
+                            f"{server.config.host}:{server.config.port}…"
+                        )
                         await server.serve()
+
+                    except SystemExit:
+                        pass
 
                     except KeyboardInterrupt:
                         pass
@@ -282,7 +290,7 @@ def runit(
                     raise asyncio.CancelledError
 
             except asyncio.CancelledError:
-                logger.info("Exiting…")
+                clilogger.info("Exiting…")
 
     try:
         loop.run_until_complete(lifespan(plugin_factories))
@@ -294,7 +302,7 @@ def runit(
     except* Exception:
         import ipdb
 
-        logger.exception("Something went really wrong")
+        clilogger.exception("Something went really wrong")
 
         ipdb.set_trace()  # noqa: E402 E702 I001 # fmt: skip
 
