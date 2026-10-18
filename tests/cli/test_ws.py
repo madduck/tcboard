@@ -1,6 +1,7 @@
 import asyncio
 import json
 import pathlib
+from collections.abc import MutableMapping
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -12,7 +13,10 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from pytest_mock import MockerFixture
-from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
+from starlette.status import (
+    HTTP_500_INTERNAL_SERVER_ERROR,
+    WS_1013_TRY_AGAIN_LATER,
+)
 from starlette.websockets import WebSocketDisconnect
 from tptools import Court, DeviceCourtMap
 from tptools.namepolicy import (
@@ -33,6 +37,8 @@ from tcboard.cli.ws import (
     CourtData,
     DisplayData,
     PlayerShortNamePolicyParams,
+    WebSocketRejection,
+    WebSocketRejectionMiddleware,
     WSHandler,
     configure_for_websockets,
     get_dev_map,
@@ -41,6 +47,7 @@ from tcboard.cli.ws import (
     get_playershortnamepolicy,
     get_remote,
     get_schema,
+    get_tournament_ws,
     get_websocket_peer,
     interval_generator,
     process_tcboard_event,
@@ -199,6 +206,130 @@ async def test_interval_generator_repeats() -> None:
             if len(collected) == 3:
                 break
     assert collected == ["tick", "tick", "tick"]
+
+
+# ---------------------------------------------------------------------------
+# WebSocketRejection / WebSocketRejectionMiddleware
+# ---------------------------------------------------------------------------
+
+
+def test_websocket_rejection_defaults() -> None:
+    exc = WebSocketRejection(status_code=424, reason="nope")
+    assert exc.status_code == 424
+    assert exc.reason == "nope"
+    assert exc.close_code == 1008
+
+
+def test_websocket_rejection_custom_close_code() -> None:
+    exc = WebSocketRejection(
+        status_code=424, reason="nope", close_code=WS_1013_TRY_AGAIN_LATER
+    )
+    assert exc.close_code == WS_1013_TRY_AGAIN_LATER
+
+
+def make_scope(scope_type: str) -> Any:
+    return {"type": scope_type, "headers": [], "path": "/"}
+
+
+async def noop_receive() -> dict[str, Any]:
+    return {"type": "websocket.disconnect", "code": 1000}
+
+
+@pytest.mark.asyncio
+async def test_middleware_passes_through_non_websocket() -> None:
+    seen: list[Any] = []
+
+    async def app(scope: Any, receive: Any, send: Any) -> None:
+        seen.append(scope)
+
+    middleware = WebSocketRejectionMiddleware(app)
+    await middleware(make_scope("http"), noop_receive, MagicMock())
+    assert len(seen) == 1
+
+
+@pytest.mark.asyncio
+async def test_middleware_rejects_before_accept() -> None:
+    async def app(scope: Any, receive: Any, send: Any) -> None:
+        raise WebSocketRejection(
+            status_code=424,
+            reason="The tournament has not been loaded yet",
+            close_code=WS_1013_TRY_AGAIN_LATER,
+        )
+
+    sent: list[Any] = []
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        sent.append(message)
+
+    middleware = WebSocketRejectionMiddleware(app)
+    await middleware(make_scope("websocket"), noop_receive, send)
+
+    assert [m["type"] for m in sent] == ["websocket.accept", "websocket.close"]
+    assert sent[1]["code"] == WS_1013_TRY_AGAIN_LATER
+    assert sent[1]["reason"] == "The tournament has not been loaded yet"
+
+
+@pytest.mark.asyncio
+async def test_middleware_truncates_long_close_reason() -> None:
+    async def app(scope: Any, receive: Any, send: Any) -> None:
+        raise WebSocketRejection(status_code=424, reason="x" * 200)
+
+    sent: list[Any] = []
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        sent.append(message)
+
+    middleware = WebSocketRejectionMiddleware(app)
+    await middleware(make_scope("websocket"), noop_receive, send)
+
+    assert len(sent[1]["reason"]) == 123
+
+
+@pytest.mark.asyncio
+async def test_middleware_reraises_after_accept() -> None:
+    async def app(scope: Any, receive: Any, send: Any) -> None:
+        await send({"type": "websocket.accept"})
+        raise WebSocketRejection(status_code=424, reason="too late")
+
+    sent: list[Any] = []
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        sent.append(message)
+
+    middleware = WebSocketRejectionMiddleware(app)
+    with pytest.raises(WebSocketRejection):
+        await middleware(make_scope("websocket"), noop_receive, send)
+
+    assert [m["type"] for m in sent] == ["websocket.accept"]
+
+
+# ---------------------------------------------------------------------------
+# get_tournament_ws
+# ---------------------------------------------------------------------------
+
+
+def test_get_tournament_ws_returns_tournament(tcboard: TCBoard) -> None:
+    assert get_tournament_ws(tcboard) is tcboard.tournament
+
+
+def test_get_tournament_ws_rejects_unloaded_tournament(tcboard: TCBoard) -> None:
+    tcboard.tournament = None
+    with pytest.raises(WebSocketRejection) as exc:
+        get_tournament_ws(tcboard)
+    assert exc.value.status_code == 424
+    assert exc.value.close_code == WS_1013_TRY_AGAIN_LATER
+
+
+def test_get_tournament_ws_reraises_other_http_errors(
+    tcboard: TCBoard, mocker: MockerFixture
+) -> None:
+    mocker.patch(
+        "tcboard.cli.ws.get_tournament",
+        side_effect=HTTPException(status_code=500, detail="boom"),
+    )
+    with pytest.raises(HTTPException) as exc:
+        get_tournament_ws(tcboard)
+    assert exc.value.status_code == 500
 
 
 def test_get_devmap_path_missing_state_is_500(httpcon: MagicMock) -> None:
@@ -559,26 +690,26 @@ async def test_endpoint_warns_on_unexpected_board_value(
 
 
 @pytest.mark.asyncio
-async def test_endpoint_tournament_not_loaded_is_tolerated(
+async def test_endpoint_warns_when_tournament_not_loaded(
     wsclictx: CliContext,
     wsocket: FakeWebSocket,
     board: TCBoard,
     mocker: MockerFixture,
 ) -> None:
     warn = mocker.patch("tcboard.cli.ws.logger.warning")
-    task = start_endpoint(wsocket, WSHandler())
-    await wait_until(lambda: len(wsocket.sent_text) == 1)
-
-    mocker.patch(
-        "tcboard.cli.ws.process_tcboard_event",
-        side_effect=TournamentNotLoaded("no tournament"),
+    mocker.patch.object(
+        TCBoard,
+        "get_courtstates_by_court",
+        side_effect=TournamentNotLoaded("not loaded"),
     )
-    wsclictx.itc.set("board", board)
+
+    task = start_endpoint(wsocket, WSHandler())
     await wait_until(
         lambda: any(
             "No tournament loaded" in str(c.args[0]) for c in warn.call_args_list
         )
     )
+    assert wsocket.sent_text == []
     await end_session(wsocket, task)
 
 

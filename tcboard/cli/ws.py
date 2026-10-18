@@ -16,6 +16,7 @@ from fastapi import (
     Query,
     WebSocket,
     WebSocketDisconnect,
+    status,
 )
 from fastapi.datastructures import URL
 from fastapi.requests import HTTPConnection
@@ -28,7 +29,8 @@ from pydantic import (
     field_serializer,
 )
 from starlette.responses import JSONResponse
-from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
+from starlette.status import HTTP_424_FAILED_DEPENDENCY, HTTP_500_INTERNAL_SERVER_ERROR
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from tptools import Court, DeviceCourtMap
 from tptools.namepolicy import (
     ClubNamePolicy,
@@ -51,10 +53,13 @@ from tptools.tpsrv.squoresrv import (
 from tcboard.board import TCBoard
 from tcboard.courtstate import CourtState
 from tcboard.exceptions import TournamentNotLoaded
+from tcboard.tournament import TCTournament
 
 from .util import (
     CliContext,
+    get_board,
     get_courts,
+    get_tournament,
     pass_clictx,
 )
 
@@ -66,7 +71,52 @@ DEVMAP_TOML_PATH = pathlib.Path("tcboard.dev_court_map.toml")
 logger = logging.getLogger(__name__)
 
 
+class WebSocketRejection(Exception):
+    def __init__(
+        self,
+        status_code: int,
+        reason: str,
+        close_code: int = status.WS_1008_POLICY_VIOLATION,
+    ):
+        self.status_code = status_code
+        self.reason = reason
+        self.close_code = close_code
+
+
+class WebSocketRejectionMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "websocket":
+            return await self.app(scope, receive, send)
+
+        accepted = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal accepted
+            if message["type"] == "websocket.accept":
+                accepted = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except WebSocketRejection as exc:
+            if accepted:
+                raise  # handshake already completed; can only close now
+
+            await send({"type": "websocket.accept"})
+            await send(
+                {
+                    "type": "websocket.close",
+                    "code": exc.close_code,
+                    "reason": exc.reason.encode()[:123].decode(errors="ignore"),
+                }
+            )
+
+
 wsapp = FastAPI()
+wsapp.add_middleware(WebSocketRejectionMiddleware)
 
 
 class PlayerShortNamePolicyParams(ParamsModel):
@@ -131,6 +181,27 @@ def get_dev_map(
         logger.warning(f"Squore device to court map not found at {path}, ignoring…")
 
     return DeviceCourtMap()
+
+
+def get_tournament_ws(
+    board: Annotated[TCBoard, Depends(get_board)],
+) -> TCTournament | Never:
+    try:
+        return get_tournament(board)
+
+    except HTTPException as err:
+        if err.status_code == HTTP_424_FAILED_DEPENDENCY:
+            raise WebSocketRejection(
+                status_code=status.HTTP_424_FAILED_DEPENDENCY,
+                reason="The tournament has not been loaded yet",
+                close_code=status.WS_1013_TRY_AGAIN_LATER,
+            ) from err
+
+        else:
+            raise
+
+
+wsapp.dependency_overrides[get_tournament] = get_tournament_ws
 
 
 def get_drawnamepolicy(
