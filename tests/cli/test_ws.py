@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from pytest_mock import MockerFixture
+from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 from starlette.websockets import WebSocketDisconnect
 from tptools import Court, DeviceCourtMap
 from tptools.namepolicy import (
@@ -370,6 +371,20 @@ def test_wshandler_make_instance_dev_to_court_map(court1: Court) -> None:
         courts=[court1],
     )
     assert handler.courtids and court1.id in handler.courtids
+
+
+@pytest.mark.asyncio
+async def test_wshandler_needs_api(
+    wsclictx: CliContext, caplog: pytest.LogCaptureFixture
+) -> None:
+    wsclictx.api.routes.clear()
+    ws = FakeWebSocket(wsclictx.api)
+    handler = WSHandler()
+    async with handler.accept(ws):  # type: ignore[arg-type]
+        with pytest.raises(HTTPException) as exc:
+            await handler.send_welcome()
+    assert exc.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+    assert "API plugin seems not to be loaded yet" in caplog.text
 
 
 @pytest.mark.asyncio

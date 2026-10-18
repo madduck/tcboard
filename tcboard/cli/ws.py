@@ -8,7 +8,7 @@ from typing import Annotated, Any, ClassVar, Never, Self, cast
 import aiostream
 import click
 from aiostream.core import Streamer
-from click_async_plugins import PluginLifespan, plugin
+from click_async_plugins import PluginLifespan, depends_on, plugin
 from fastapi import (
     Depends,
     FastAPI,
@@ -320,9 +320,18 @@ class WSHandler:
             raise RuntimeError("Trying to send board on non-existent web socket")
 
         api = cast(FastAPI, self._websocket.app.state.clictx.api)
-        apiroute = cast(
-            Mount, [r for r in api.routes if getattr(r, "name", None) == "apiapp"][0]
-        )
+        try:
+            apiroute = cast(
+                Mount,
+                [r for r in api.routes if getattr(r, "name", None) == "apiapp"][0],
+            )
+
+        except IndexError as err:
+            logger.error("API plugin seems not to be loaded yet")
+            raise HTTPException(
+                HTTP_500_INTERNAL_SERVER_ERROR, "WS plugin misses access to API"
+            ) from err
+
         baseurl = self._websocket.base_url
         baseurl = baseurl.replace(
             scheme="http" if baseurl.scheme == "ws" else "https",
@@ -484,6 +493,7 @@ async def configure_for_websockets(
     help="API mount point for Squore endpoints",
 )
 @pass_clictx
+@depends_on("api")
 async def ws(
     clictx: CliContext,
     devmap_toml: pathlib.Path,
