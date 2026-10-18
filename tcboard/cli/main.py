@@ -243,7 +243,18 @@ def runit(
     loop = new_event_loop()
     asyncio.set_event_loop(loop)
 
-    config = uvicorn.Config(clictx.api, host=host, port=port, access_log=False)
+    config = uvicorn.Config(
+        clictx.api,
+        host=host,
+        port=port,
+        access_log=False,
+        # Do not let uvicorn install its own handlers/formatters. With the
+        # default log_config, uvicorn.config.LOGGING_CONFIG attaches a
+        # StreamHandler to the "uvicorn" logger and disables propagation, which
+        # bypasses our own formatter and writes straight to stderr. Passing
+        # None keeps uvicorn's loggers propagating into our logging hierarchy.
+        log_config=None,
+    )
     server = uvicorn.Server(config)
 
     plugin_factories.append(partial(receive_tournament, clictx))

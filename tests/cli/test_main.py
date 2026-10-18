@@ -1,5 +1,7 @@
 import asyncio
 import importlib
+import io
+import logging
 import pathlib
 import sys
 from collections.abc import Callable, Generator
@@ -364,6 +366,56 @@ def test_click_exception_is_reraised(
 def test_port_out_of_range_is_rejected(runner: CliRunner) -> None:
     result = runner.invoke(tcboard, ["--config", "/dev/null", "-p", "80", "api"])
     assert result.exit_code == 2
+
+
+# --- uvicorn logging integration -----------------------------------------
+
+
+def test_uvicorn_loggers_propagate_to_our_hierarchy() -> None:
+    """``log_config=None`` keeps Uvicorn's loggers propagating into ours.
+
+    This exercises the real ``uvicorn.Config`` rather than a mock, so it fails
+    if the ``log_config`` argument is dropped or set back to the default.
+    """
+    import uvicorn
+
+    cfg = uvicorn.Config(lambda *args: None, log_config=None)
+    cfg.configure_logging()
+
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.asgi", "uvicorn.access"):
+        ulog = logging.getLogger(name)
+        assert ulog.handlers == [], f"{name} must not carry its own handler"
+        assert ulog.propagate is True, f"{name} must propagate to our hierarchy"
+
+
+def test_uvicorn_records_use_our_formatter() -> None:
+    """A record on ``uvicorn.error`` is rendered by our ``StreamHandler``."""
+    import uvicorn
+
+    cfg = uvicorn.Config(lambda *args: None, log_config=None)
+    cfg.configure_logging()
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="{levelname} {name} {message}",
+            style="{",
+        )
+    )
+
+    root = logging.getLogger()
+    saved_handlers = root.handlers[:]
+    saved_level = root.level
+    try:
+        root.handlers = [handler]
+        root.setLevel(logging.INFO)
+        logging.getLogger("uvicorn.error").info("Application startup complete.")
+    finally:
+        root.handlers = saved_handlers
+        root.setLevel(saved_level)
+
+    assert stream.getvalue() == ("INFO uvicorn.error Application startup complete.\n")
 
 
 # --- import-time fallbacks -----------------------------------------------
