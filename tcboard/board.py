@@ -207,58 +207,98 @@ class TCBoard(BaseModel[None]):
 
             yield ms
 
+    def _process_matchstate(self, ms: MatchState) -> None:
+        if ms.match.errors:
+            # The match from TP has errors. Therefore, alert the user,
+            # and unack the match:
+            self.handle_error(
+                Alert(
+                    text="Upstream match has errors",
+                    detail=str(ms.match.errors)
+                    if len(ms.match.errors) > 1
+                    else ms.match.errors[0],
+                    matchid=ms.match.id,
+                ),
+                court=ms.match.court,
+            )
+            ms.acked = False
+
+        elif ms.livedata is None and ms.match.status in (
+            MatchStatus.PLAYED,
+            MatchStatus.NOTPLAYED,
+        ):
+            # TP sent a match without errors, which was played, or not, but
+            # also livedata is None, meaning that either
+            # (a) there was no livedata (i.e. a player retired);
+            # (b) the match has been reset via the UI.
+            # In both cases, the livedata is no longer relevant, and the
+            # TP match becomes the source of authority.
+            self.matchstates_by_matchid[ms.match.id] = (
+                ms := MatchState.make_from_tcmatch_without_livedata(ms.match)
+            )
+            ms.acked = True
+
+        elif ms.livedata is None:
+            # The match is pending: there is no livedata yet, and upstream
+            # reports it as neither played nor not played. Nothing to do.
+            # logger.debug(f"Match without live data: {ms.match}")
+            pass
+
+        elif ms.match.scores:
+            # There is livedata, and there are scores from TP. If those compare
+            # equal, the match can be ack'ed …
+            if ms.livedata.scores == ms.match.scores:
+                if not ms.acked:
+                    logger.info(
+                        f"Ack'ing match with ID {ms.match.id} with upstream data"
+                    )
+                    ms.acked = True
+
+            else:
+                # but OUCH when upstream and livedata differ in the scores, requiring
+                # an alert, and unack the match.
+                self.handle_error(
+                    Alert(
+                        text="Upstream match data differ from live state",
+                        detail=(
+                            f"upstream={ms.match.scores} vs. live={ms.livedata.scores}"
+                        ),
+                        matchid=ms.match.id,
+                    ),
+                    court=ms.match.court,
+                )
+                ms.acked = False
+
+        else:
+            # There is livedata, but upstream has no comparable scores and yet
+            # reports the match as settled (played or not played). TP and the
+            # live state disagree about a settled match, so alert the user.
+            self.handle_error(
+                Alert(
+                    text="Upstream match conflicts with live state",
+                    detail=(
+                        f"upstream status={ms.match.status}, "
+                        f"live status={ms.livedata.status}"
+                    ),
+                    matchid=ms.match.id,
+                ),
+                court=ms.match.court,
+            )
+            ms.acked = False
+
     async def process_tournament(self, tournament: TCTournament) -> None | Never:
         logger.debug(f"Processing {tournament.__class__.__name__}: {tournament}")
         self.tournament = tournament
 
-        for devid, court in self.court_by_deviceid.items():
-            # TODO: this is a hack until TPTools fills in devids
-            if court is None:
-                continue
-            self.set_scoredev_for_court(court, devid)
+        # for devid, court in self.court_by_deviceid.items():
+        #     # TODO: this is a hack until TPTools fills in devids
+        #     if court is None:
+        #         continue
+        #     self.set_scoredev_for_court(court, devid)
 
         for ms in self._get_matchstates(tournament):
             self._maybe_debug_match(ms.match)
-
-            if ms.livedata is None and ms.match.status in (
-                MatchStatus.PLAYED,
-                MatchStatus.NOTPLAYED,
-            ):
-                self.matchstates_by_matchid[ms.match.id] = (
-                    ms := MatchState.make_from_tcmatch_without_livedata(ms.match)
-                )
-
-            if ms.livedata is not None and ms.match.scores:
-                if ms.livedata.scores == ms.match.scores:
-                    if not ms.acked:
-                        logger.info(
-                            f"Ack'ing match with ID {ms.match.id} with upstream data"
-                        )
-                        ms.acked = True
-
-                # We would only need the following if we actually created fake-live
-                # TPData from TPMatch, which we don't (see above), as there is no
-                # discernable reason to do so.
-                #
-                # # elif ms.livedata.deviceid == "TournamentSoftware":
-                # #     logger.info(f"New result received for match {match.id}")
-                # #     self.matchstates_by_matchid[match.id] = (
-                # #         self._make_matchstate_from_tpdata(match)
-                # #     )
-
-                else:
-                    self.handle_error(
-                        Alert(
-                            text="Upstream match data differ from live state",
-                            detail=(
-                                f"upstream={ms.match.scores} "
-                                f"vs. live={ms.livedata.scores}"
-                            ),
-                            matchid=ms.match.id,
-                        ),
-                        court=ms.match.court,
-                    )
-                    ms.acked = False
+            self._process_matchstate(ms)
 
         for buffered in self._livedatabuffer:
             await self.process_squore_livedata(buffered)
@@ -359,7 +399,7 @@ class TCBoard(BaseModel[None]):
 
     async def reset_match(self, matchid: str) -> None:
         try:
-            self.matchstates_by_matchid[matchid].reset()
+            ms = self.matchstates_by_matchid[matchid]
 
         except KeyError as exc:
             raise EntityNotFoundError(
@@ -369,7 +409,9 @@ class TCBoard(BaseModel[None]):
             ) from exc
 
         else:
+            ms.reset()
             logger.debug(f"Reset match {matchid}")
+            self._process_matchstate(ms)
             await self._post_update()
 
     async def clear_alert(self, courtid: int, alertid: UUID4) -> None:

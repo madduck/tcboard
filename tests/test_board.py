@@ -87,6 +87,7 @@ from tptools import MatchStatus  # noqa: E402
 
 from tcboard.devinfo import DeviceInfo  # noqa: E402
 from tcboard.exceptions import EntityNotFoundError  # noqa: E402
+from tcboard.ext.tptools.livedata import TPData  # noqa: E402
 from tcboard.livestatus import LiveStatus  # noqa: E402
 from tcboard.matchstate import MatchState  # noqa: E402
 
@@ -227,15 +228,6 @@ async def test_process_tournament_alerts_when_upstream_differs(
 
 
 @pytest.mark.asyncio
-async def test_process_tournament_sets_scoredev_for_known_devices(
-    tcboard: TCBoard, tournament: TCTournament, court1: _Court
-) -> None:
-    tcboard.court_by_deviceid = {"dev-1": court1, "dev-none": None}
-    await tcboard.process_tournament(tournament)
-    assert tournament.courts[court1.id].scoredev == "dev-1"
-
-
-@pytest.mark.asyncio
 async def test_process_tournament_replays_buffered_livedata(
     tcboard: TCBoard,
     tournament: TCTournament,
@@ -257,6 +249,228 @@ def test_set_scoredev_without_tournament_is_noop(
     tcboard.tournament = None
     tcboard.set_scoredev_for_court(court1, "dev")  # must not raise
     assert tcboard.tournament is None
+
+
+# ---------------------------------------------------------------------------
+# _process_matchstate
+# ---------------------------------------------------------------------------
+
+
+def _register(
+    board: TCBoard,
+    match: Any,
+    livedata: Any | None = None,
+    *,
+    acked: bool = False,
+) -> MatchState:
+    ms = MatchState(match=match, livedata=livedata)
+    ms.acked = acked
+    board.matchstates_by_matchid[match.id] = ms
+    return ms
+
+
+# 1. A match with errors only raises an alert and does nothing else.
+
+
+def test_process_matchstate_errors_alert_and_nothing_else(
+    tcboard: TCBoard, MatchFactory: Any, court1: _Court
+) -> None:
+    m = MatchFactory(id="err", errors=["boom"], status=MatchStatus.PENDING)
+    ms = _register(tcboard, m, acked=True)
+
+    tcboard._process_matchstate(ms)
+
+    alerts = tcboard.alerts_by_courtid[court1.id]
+    assert any(
+        a.text == "Upstream match has errors" and a.detail == "boom" for a in alerts
+    )
+    assert ms.acked is False
+    # nothing else happened: the matchstate object is untouched
+    assert tcboard.matchstates_by_matchid[m.id] is ms
+    assert ms.livedata is None
+
+
+def test_process_matchstate_errors_detail_joins_multiple(
+    tcboard: TCBoard, MatchFactory: Any, court1: _Court
+) -> None:
+    errors = ["one", "two"]
+    m = MatchFactory(id="err2", errors=errors, status=MatchStatus.PENDING)
+    ms = _register(tcboard, m)
+
+    tcboard._process_matchstate(ms)
+
+    alerts = tcboard.alerts_by_courtid[court1.id]
+    assert any(
+        a.text == "Upstream match has errors" and a.detail == str(errors)
+        for a in alerts
+    )
+
+
+# 2. Scores that differ from livedata only raise an alert.
+
+
+def test_process_matchstate_score_mismatch_alert_and_nothing_else(
+    tcboard: TCBoard,
+    MatchFactory: Any,
+    FakeLiveDataFactory: Any,
+    court1: _Court,
+) -> None:
+    m = MatchFactory(id="differ", scores=[(11, 9)], status=MatchStatus.PLAYED)
+    ld = FakeLiveDataFactory(
+        court=court1.id, matchid="differ", scores=[(11, 5)], status=LiveStatus.FINISHED
+    )
+    ms = _register(tcboard, m, ld, acked=True)
+
+    tcboard._process_matchstate(ms)
+
+    alerts = tcboard.alerts_by_courtid[court1.id]
+    assert any(a.text == "Upstream match data differ from live state" for a in alerts)
+    assert any(a.detail == "upstream=[(11, 9)] vs. live=[(11, 5)]" for a in alerts)
+    assert ms.acked is False
+    assert ms.livedata is ld
+
+
+# 3. Matching scores for a PLAYED match acks it.
+
+
+def test_process_matchstate_matching_scores_played_acks(
+    tcboard: TCBoard,
+    MatchFactory: Any,
+    FakeLiveDataFactory: Any,
+    court1: _Court,
+) -> None:
+    scores = [(11, 9)]
+    m = MatchFactory(id="ackme", scores=scores, status=MatchStatus.PLAYED)
+    ld = FakeLiveDataFactory(
+        court=court1.id, matchid="ackme", scores=scores, status=LiveStatus.FINISHED
+    )
+    ms = _register(tcboard, m, ld)
+
+    tcboard._process_matchstate(ms)
+
+    assert ms.acked is True
+    assert not tcboard.alerts_by_courtid[court1.id]
+
+
+def test_process_matchstate_matching_scores_keeps_already_acked(
+    tcboard: TCBoard,
+    MatchFactory: Any,
+    FakeLiveDataFactory: Any,
+    court1: _Court,
+) -> None:
+    scores = [(11, 9)]
+    m = MatchFactory(id="ackme2", scores=scores, status=MatchStatus.PLAYED)
+    ld = FakeLiveDataFactory(
+        court=court1.id, matchid="ackme2", scores=scores, status=LiveStatus.FINISHED
+    )
+    ms = _register(tcboard, m, ld, acked=True)
+
+    tcboard._process_matchstate(ms)
+
+    assert ms.acked is True
+    assert not tcboard.alerts_by_courtid[court1.id]
+
+
+# 4. An UNPLAYED (NOTPLAYED) match.
+
+
+def test_process_matchstate_unplayed_without_livedata_fakes_and_acks(
+    tcboard: TCBoard, MatchFactory: Any, court1: _Court
+) -> None:
+    m = MatchFactory(id="unplayed", scores=[], status=MatchStatus.NOTPLAYED)
+    ms = _register(tcboard, m)
+
+    tcboard._process_matchstate(ms)
+
+    newms = tcboard.matchstates_by_matchid[m.id]
+    assert newms is not ms
+    assert isinstance(newms.livedata, TPData)
+    assert newms.livedata.matchid == m.id
+    assert newms.acked is True
+    assert not tcboard.alerts_by_courtid[court1.id]
+
+
+def test_process_matchstate_unplayed_with_ongoing_livedata_alerts(
+    tcboard: TCBoard,
+    MatchFactory: Any,
+    FakeLiveDataFactory: Any,
+    court1: _Court,
+) -> None:
+    m = MatchFactory(id="unplayed2", scores=[], status=MatchStatus.NOTPLAYED)
+    ld = FakeLiveDataFactory(
+        court=court1.id, matchid="unplayed2", status=LiveStatus.ONGOING
+    )
+    ms = _register(tcboard, m, ld, acked=True)
+
+    tcboard._process_matchstate(ms)
+
+    alerts = tcboard.alerts_by_courtid[court1.id]
+    assert any(
+        a.text == "Upstream match conflicts with live state"
+        and a.detail == f"upstream status={m.status}, live status={LiveStatus.ONGOING}"
+        for a in alerts
+    )
+    assert ms.acked is False
+
+
+# 5. The same as 4, but with a PLAYED match.
+
+
+def test_process_matchstate_played_without_livedata_fakes_and_acks(
+    tcboard: TCBoard, MatchFactory: Any, court1: _Court
+) -> None:
+    m = MatchFactory(id="played", scores=[], status=MatchStatus.PLAYED)
+    ms = _register(tcboard, m)
+
+    tcboard._process_matchstate(ms)
+
+    newms = tcboard.matchstates_by_matchid[m.id]
+    assert newms is not ms
+    assert isinstance(newms.livedata, TPData)
+    assert newms.livedata.matchid == m.id
+    assert newms.acked is True
+    assert not tcboard.alerts_by_courtid[court1.id]
+
+
+def test_process_matchstate_played_with_ongoing_livedata_alerts(
+    tcboard: TCBoard,
+    MatchFactory: Any,
+    FakeLiveDataFactory: Any,
+    court1: _Court,
+) -> None:
+    m = MatchFactory(id="played2", scores=[], status=MatchStatus.PLAYED)
+    ld = FakeLiveDataFactory(
+        court=court1.id, matchid="played2", status=LiveStatus.ONGOING
+    )
+    ms = _register(tcboard, m, ld, acked=True)
+
+    tcboard._process_matchstate(ms)
+
+    alerts = tcboard.alerts_by_courtid[court1.id]
+    assert any(
+        a.text == "Upstream match conflicts with live state"
+        and a.detail == f"upstream status={m.status}, live status={LiveStatus.ONGOING}"
+        for a in alerts
+    )
+    assert ms.acked is False
+
+
+def test_process_matchstate_pending_without_livedata_is_noop(
+    tcboard: TCBoard,
+    MatchFactory: Any,
+    court1: _Court,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    m = MatchFactory(id="pending", scores=[], status=MatchStatus.PENDING)
+    ms = _register(tcboard, m)
+
+    with caplog.at_level(logging.ERROR):
+        tcboard._process_matchstate(ms)
+
+    assert not tcboard.alerts_by_courtid[court1.id]
+    assert ms.acked is False
+    assert tcboard.matchstates_by_matchid[m.id] is ms
+    assert not any("Unknown state" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -391,13 +605,37 @@ async def test_reset_match(tcboard: TCBoard, matchstate: MatchState) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reset_match_index_error_becomes_entity_not_found(
-    tcboard: TCBoard, matchstate: MatchState, mocker: MockerFixture
+async def test_reset_mismatched_match_fakes_livedata_and_acks(
+    tcboard: TCBoard,
+    MatchFactory: Any,
+    FakeLiveDataFactory: Any,
+    court1: _Court,
 ) -> None:
-    tcboard.matchstates_by_matchid[matchstate.match.id] = matchstate
-    mocker.patch.object(MatchState, "reset", side_effect=KeyError("gone"))
+    # Set up a mismatch between upstream and live scores (case 2).
+    m = MatchFactory(id="resetme", scores=[(11, 9)], status=MatchStatus.PLAYED)
+    ld = FakeLiveDataFactory(
+        court=court1.id, matchid="resetme", scores=[(11, 5)], status=LiveStatus.FINISHED
+    )
+    ms = _register(tcboard, m, ld)
+    tcboard._process_matchstate(ms)
+    assert ms.acked is False
+    assert tcboard.alerts_by_courtid[court1.id]
+
+    # Resetting drops the livedata; _process_matchstate then fakes livedata from
+    # the upstream match and ack's it, exactly like case 4.1.
+    await tcboard.reset_match(m.id)
+
+    newms = tcboard.matchstates_by_matchid[m.id]
+    assert newms is not ms
+    assert isinstance(newms.livedata, TPData)
+    assert newms.livedata.matchid == m.id
+    assert newms.acked is True
+
+
+@pytest.mark.asyncio
+async def test_reset_unknown_match_raises_entity_not_found(tcboard: TCBoard) -> None:
     with pytest.raises(EntityNotFoundError):
-        await tcboard.reset_match(matchstate.match.id)
+        await tcboard.reset_match("nope")
 
 
 @pytest.mark.asyncio
