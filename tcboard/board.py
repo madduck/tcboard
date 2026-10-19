@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Iterable, MutableMapping, Never, Protocol, cast
@@ -192,6 +192,21 @@ class TCBoard(BaseModel[None]):
                 logger.error("Unable to find frame, starting debugger without…")
                 ipdb.set_trace()
 
+    def _get_matchstates(self, tournament: TCTournament) -> Generator[MatchState]:
+        for match in tournament.get_matches(
+            include_played=True, include_not_ready=True
+        ):
+            if (ms := self.matchstates_by_matchid.get(match.id)) is None:
+                # There is no MatchState known for this matchid yet, so make one:
+                ms = MatchState(match=match)
+                self.matchstates_by_matchid[match.id] = ms
+
+            else:
+                # … else, update the match in the existing MatchState
+                ms.match = match
+
+            yield ms
+
     async def process_tournament(self, tournament: TCTournament) -> None | Never:
         logger.debug(f"Processing {tournament.__class__.__name__}: {tournament}")
         self.tournament = tournament
@@ -202,31 +217,22 @@ class TCBoard(BaseModel[None]):
                 continue
             self.set_scoredev_for_court(court, devid)
 
-        for match in tournament.get_matches(
-            include_played=True, include_not_ready=True
-        ):
-            self._maybe_debug_match(match)
-
-            if (ms := self.matchstates_by_matchid.get(match.id)) is None:
-                ms = MatchState(match=match)
-                self.matchstates_by_matchid[match.id] = ms
-
-            else:
-                ms.match = match
+        for ms in self._get_matchstates(tournament):
+            self._maybe_debug_match(ms.match)
 
             if ms.livedata is None and ms.match.status in (
                 MatchStatus.PLAYED,
                 MatchStatus.NOTPLAYED,
             ):
-                self.matchstates_by_matchid[match.id] = (
-                    ms := MatchState.make_from_tcmatch_without_livedata(match)
+                self.matchstates_by_matchid[ms.match.id] = (
+                    ms := MatchState.make_from_tcmatch_without_livedata(ms.match)
                 )
 
-            if ms.livedata is not None and match.scores:
-                if ms.livedata.scores == match.scores:
+            if ms.livedata is not None and ms.match.scores:
+                if ms.livedata.scores == ms.match.scores:
                     if not ms.acked:
                         logger.info(
-                            f"Ack'ing match with ID {match.id} with upstream data"
+                            f"Ack'ing match with ID {ms.match.id} with upstream data"
                         )
                         ms.acked = True
 
@@ -245,9 +251,10 @@ class TCBoard(BaseModel[None]):
                         Alert(
                             text="Upstream match data differ from live state",
                             detail=(
-                                f"upstream={match.scores} vs. live={ms.livedata.scores}"
+                                f"upstream={ms.match.scores} "
+                                f"vs. live={ms.livedata.scores}"
                             ),
-                            matchid=match.id,
+                            matchid=ms.match.id,
                         ),
                         court=ms.match.court,
                     )
