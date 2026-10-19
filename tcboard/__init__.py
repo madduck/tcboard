@@ -8,7 +8,7 @@ try:
     from ._version import version as VERSION
 
 except ImportError:  # pragma: nocover
-    Version = None
+    VERSION = None
 
 __all__ = [
     "TCBoard",
