@@ -514,7 +514,7 @@ class TCBoard(BaseModel[None]):
     def debug_render(
         self, *, npending: int = 3, nfinished: int = 2
     ) -> str:  # pragma: nocover
-        cols = ["court", f"rev={self.rev}"]
+        cols = ["court", "dev", f"rev={self.rev}"]
         for i in range(npending - 1, 0, -1):
             cols.append(f"pend+{i}")
         cols.append("next")
@@ -529,6 +529,7 @@ class TCBoard(BaseModel[None]):
         def make_row(cs: CourtState, npending: int, nfinished: int) -> tuple[str, ...]:
             ret: list[Any] = []
             ret.append(cs.court.name if cs.court is not None else None)
+            ret.append(cs.court.scoredev if cs.court is not None else None)
             ret.append(int(cs.tick) if cs.tick is not None else "")
 
             # pending
