@@ -82,8 +82,11 @@ class DBManager(AbstractAsyncContextManager["DBManager"]):
 
     async def insert_json_record(self, table: str, model: BaseModel) -> int | Never:
         json = model.model_dump_json(round_trip=True)
+        if '"' in table:
+            raise ValueError(f'table cannot contain `"`: {table}')
         cursor = await self.execute(
-            f"insert into {table} (data) values (:json) returning id", {"json": json}
+            f'insert into "{table}" (data) values (:json) returning id',  # nosec: B608
+            {"json": json},
         )
         ret = await cursor.fetchone()
         if ret is None:  # pragma no cover — don't know how to test for this

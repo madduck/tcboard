@@ -63,6 +63,16 @@ async def test_insert_json_record(tablename: str, dbmanager_inited: DBManager) -
 
 
 @pytest.mark.asyncio
+async def test_insert_json_record_rejects_quoted_table(
+    dbmanager_inited: DBManager,
+) -> None:
+    class EmptyModel(BaseModel): ...
+
+    with pytest.raises(ValueError, match='table cannot contain `"`'):
+        await dbmanager_inited.insert_json_record('tab"le', EmptyModel())
+
+
+@pytest.mark.asyncio
 async def test_record_tournament(dbmanager_inited: DBManager) -> None:
     assert await dbmanager_inited.record_tournament(TCTournament()) == 1
 
