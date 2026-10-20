@@ -56,6 +56,7 @@ dev = [
   "pytest-cov",
   "types-tabulate",
   "types-python-dateutil",
+  "bandit>=1.9.4",
 ]
 
 [project.scripts]
@@ -97,3 +98,9 @@ exclude_also = [
   'raise NotImplementedError',
   'raise AssertionError',
 ]
+
+[tool.bandit]
+exclude_dirs = ['.venv', '.worktrees']
+
+[tool.bandit.assert_used]
+skips = ['*/tests/**.py', '*/integration/**.py']
