@@ -42,10 +42,10 @@ async def test_init_tables(dbmanager: DBManager) -> None:
 async def test_init_tables_idempotent(
     dbmanager_inited: DBManager, drop: bool, count: int, tablename: str
 ) -> None:
-    assert (await dbmanager_inited.execute(f"select * from {tablename}")).lastrowid == 0
-    await dbmanager_inited.execute(f"insert into {tablename} (data) values ('{{}}')")
+    assert (await dbmanager_inited.execute(f"select * from {tablename}")).lastrowid == 0  # nosec: B608
+    await dbmanager_inited.execute(f"insert into {tablename} (data) values ('{{}}')")  # nosec: B608
     await dbmanager_inited.init_tables(drop_tables=drop)
-    curs = await dbmanager_inited.execute(f"select count(*) from {tablename}")
+    curs = await dbmanager_inited.execute(f"select count(*) from {tablename}")  # nosec: B608
     async for row in curs:
         assert row["count(*)"] == count
         break
