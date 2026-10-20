@@ -164,7 +164,7 @@ async def on_board_update(board: TCBoard, itc: ITC, **updates: Any) -> None:
     "--host",
     "-h",
     metavar="IP",
-    default="0.0.0.0",
+    default="127.0.0.1",
     show_default=True,
     help="Host to listen on (bind to)",
 )
