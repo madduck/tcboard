@@ -4,14 +4,12 @@ from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-import click
 import pytest
 from pytest_mock import MockerFixture
 
 from tcboard import TCBoard, TCTournament
 from tcboard.cli.db import (
     DEFAULT_SQLITE_PATH,
-    OptionalPath,
     database_backend,
     receive_updates,
 )
@@ -23,23 +21,6 @@ from tcboard.dbmanager import DBManager
 from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
 from .conftest import cancel, close_if_coro, wait_until
-
-# --- OptionalPath -----------------------------------------------------------
-
-
-def test_optionalpath_false_means_unset() -> None:
-    assert OptionalPath(path_type=pathlib.Path).convert(False, None, None) is None
-
-
-def test_optionalpath_true_is_usage_error() -> None:
-    with pytest.raises(click.BadParameter, match="`true` is not a valid value"):
-        OptionalPath(path_type=pathlib.Path).convert(True, None, None)
-
-
-def test_optionalpath_string_is_normal_path() -> None:
-    ret = OptionalPath(path_type=pathlib.Path).convert("some/file.sqlite", None, None)
-    assert ret == pathlib.Path("some/file.sqlite")
-
 
 # --- receive_updates --------------------------------------------------------
 

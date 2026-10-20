@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from os import PathLike
 from typing import TYPE_CHECKING, Annotated, Never, cast
 
 import click
@@ -73,3 +74,29 @@ def get_courts(
     tournament: Annotated[TCTournament, Depends(get_tournament)],
 ) -> list[Court]:
     return tournament.get_courts()
+
+
+class OptionalPath(click.Path):
+    """A click.Path that accepts `false` from a config file to mean "not set".
+
+    - bool False -> None (so your internal default can kick in)
+    - bool True  -> usage error
+    - anything else -> normal click.Path handling
+    """
+
+    def convert(  # type: ignore[override]
+        self,
+        value: str | PathLike[str] | bool,
+        param: click.Parameter | None,
+        ctx: click.Context | None,
+    ) -> str | bytes | PathLike[str] | None:
+        if isinstance(value, bool):
+            if value is False:
+                return None
+            self.fail(
+                "`true` is not a valid value here. Provide a file name, or use "
+                "`false` to select the built-in default of an in-memory database",
+                param,
+                ctx,
+            )
+        return super().convert(value, param, ctx)

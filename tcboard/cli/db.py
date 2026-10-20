@@ -1,7 +1,6 @@
 import logging
 import pathlib
 from contextlib import asynccontextmanager
-from os import PathLike
 from typing import Any, Literal, cast
 
 import aiostream
@@ -13,7 +12,7 @@ from tcboard import TCBoard, TCTournament
 from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
 from ..dbmanager import DBManager
-from .util import CliContext, pass_clictx
+from .util import CliContext, OptionalPath, pass_clictx
 
 DEFAULT_SQLITE_PATH = pathlib.Path("./db.sqlite")
 
@@ -106,32 +105,6 @@ async def database_backend(
         )
 
     logger.info(f"Closing database {file}")
-
-
-class OptionalPath(click.Path):
-    """A click.Path that accepts `false` from a config file to mean "not set".
-
-    - bool False -> None (so your internal default can kick in)
-    - bool True  -> usage error
-    - anything else -> normal click.Path handling
-    """
-
-    def convert(  # type: ignore[override]
-        self,
-        value: str | PathLike[str] | bool,
-        param: click.Parameter | None,
-        ctx: click.Context | None,
-    ) -> str | bytes | PathLike[str] | None:
-        if isinstance(value, bool):
-            if value is False:
-                return None
-            self.fail(
-                "`true` is not a valid value here. Provide a file name, or use "
-                "`false` to select the built-in default of an in-memory database",
-                param,
-                ctx,
-            )
-        return super().convert(value, param, ctx)
 
 
 @plugin

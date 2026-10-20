@@ -1,3 +1,6 @@
+import pathlib
+
+import click
 import pytest
 from click_async_plugins import ITC
 from fastapi import HTTPException
@@ -9,11 +12,28 @@ from tptools import Court
 from tcboard import TCBoard, TCTournament
 from tcboard.cli.util import (
     CliContext,
+    OptionalPath,
     get_board,
     get_courts,
     get_remote,
     get_tournament,
 )
+
+# --- OptionalPath -----------------------------------------------------------
+
+
+def test_optionalpath_false_means_unset() -> None:
+    assert OptionalPath(path_type=pathlib.Path).convert(False, None, None) is None
+
+
+def test_optionalpath_true_is_usage_error() -> None:
+    with pytest.raises(click.BadParameter, match="`true` is not a valid value"):
+        OptionalPath(path_type=pathlib.Path).convert(True, None, None)
+
+
+def test_optionalpath_string_is_normal_path() -> None:
+    ret = OptionalPath(path_type=pathlib.Path).convert("some/file.sqlite", None, None)
+    assert ret == pathlib.Path("some/file.sqlite")
 
 
 def test_get_remote(httpcon: MockType) -> None:
