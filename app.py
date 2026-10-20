@@ -106,7 +106,8 @@ async def app_lifespan(api: FastAPI) -> AsyncGenerator[None]:
     port: int | str
     if len(broker) == 3:
         proto, host, port = broker
-        assert proto == "mqtt"
+        if proto != "mqtt":
+            raise ValueError("Only mqtt:// is supported for $MQTT_BROKER")
         host = host[2:]
 
     elif len(broker) == 2:
