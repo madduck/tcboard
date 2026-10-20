@@ -40,7 +40,7 @@ dependencies = [
   "tabulate",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "fastapi[standard]",
   "pytest",

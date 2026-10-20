@@ -51,13 +51,13 @@ Everything that changes is also written to a SQLite database if the `db` plugin 
 `tcboard` requires Python 3.13 or higher. To install the latest release, run:
 
 ```
-pip install tcboard
+uv tool install tcboard
 ```
 
 or, to install the current state of development:
 
 ```
-pip install https://github.com/madduck/tcboard/archive/refs/heads/main.zip
+uv tool install https://github.com/madduck/tcboard/archive/refs/heads/main.zip
 ```
 
 To verify that it works, run:
@@ -170,7 +170,7 @@ The application also answers `/` with a short status line, `/favicon.ico`, and `
 To contribute, please ensure you have the appropriate dependencies installed:
 
 ```
-pip install -e .[dev]
+uv sync
 ```
 
 and then install the Git pre-commit hooks that ensure that any commits conform with the coding-style used by this project.
