@@ -9,3 +9,4 @@ __pycache__
 *.sqlite
 /.direnv
 /.venv
+*.dev_court_map.toml
