@@ -11,6 +11,7 @@ from click_async_plugins import PluginLifespan, plugin
 from dateutil.parser import parser as dtparser
 from tptools.util import silence_logger
 
+from tcboard.ext.squore.devinfo import SquoreDeviceInfo
 from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
 from ..dbmanager import DBManager
@@ -64,7 +65,7 @@ async def _replay_events(clictx: CliContext, db: DBManager, speed: float) -> Non
     ts_prev: datetime | None = None
     dtparse = dtparser().parse
     board = clictx.board
-    async for rec in db.get_all_tournament_and_livedata_records():
+    async for rec in db.get_all_stream_records():
         ts = dtparse(rec["timestamp"])
         delay = ts - (ts_prev or ts)
         await asyncio.sleep(delay.total_seconds() / speed)
@@ -80,6 +81,11 @@ async def _replay_events(clictx: CliContext, db: DBManager, speed: float) -> Non
             case "squorelivedata":
                 await board.process_squore_livedata(
                     SquoreMatchLiveData.model_validate_json(rec["data"])
+                )
+
+            case "squoredevinfo":
+                await board.process_squore_deviceinfo(
+                    SquoreDeviceInfo.model_validate_json(rec["data"])
                 )
 
         ts_prev = ts

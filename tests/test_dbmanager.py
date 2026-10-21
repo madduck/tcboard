@@ -3,6 +3,8 @@ from pydantic import BaseModel
 
 from tcboard.board import TCBoard
 from tcboard.dbmanager import TABLENAMES, DBManager
+from tcboard.devinfo import DeviceInfo
+from tcboard.ext.squore.devinfo import SquoreDeviceInfo
 from tcboard.livedata import LiveData
 from tcboard.livestatus import LiveStatus
 from tcboard.tournament import TCTournament
@@ -85,6 +87,13 @@ async def test_record_livedata(
 
 
 @pytest.mark.asyncio
+async def test_record_devinfo(
+    dbmanager_inited: DBManager, deviceinfo: DeviceInfo
+) -> None:
+    assert await dbmanager_inited.record_devinfo(deviceinfo) == 1
+
+
+@pytest.mark.asyncio
 async def test_get_last_tournament_empty(dbmanager_inited: DBManager) -> None:
     tourn = await dbmanager_inited.get_latest_tournament_json()
     assert tourn is None
@@ -122,7 +131,21 @@ async def test_get_last_livedata(
 
 
 @pytest.mark.asyncio
-async def test_get_all_tournament_and_livedata_records(
+async def test_get_latest_devinfo(
+    dbmanager_inited: DBManager, deviceinfo: DeviceInfo
+) -> None:
+    await dbmanager_inited.record_devinfo(deviceinfo)
+    await dbmanager_inited.record_devinfo(deviceinfo)
+
+    seen = [json async for json in dbmanager_inited.get_latest_devinfo_json()]
+
+    assert len(seen) == 1
+    latest = DeviceInfo.model_validate_json(seen[0])
+    assert latest.deviceid == deviceinfo.deviceid
+
+
+@pytest.mark.asyncio
+async def test_get_all_stream_records(
     dbmanager_inited: DBManager, FakeLiveDataFactory: FakeLiveDataFactoryType
 ) -> None:
     await dbmanager_inited.record_tournament(TCTournament(name="one"))
@@ -134,8 +157,16 @@ async def test_get_all_tournament_and_livedata_records(
                 FakeLiveDataFactory(matchid=matchid, status=status)
             )
 
-    ret = [r async for r in dbmanager_inited.get_all_tournament_and_livedata_records()]
+    for devid in ("one", "two", "three"):
+        await dbmanager_inited.record_devinfo(
+            SquoreDeviceInfo(
+                deviceid=devid, batteryCharging=False, batteryPercentage=100
+            )
+        )
 
+    ret = [r async for r in dbmanager_inited.get_all_stream_records()]
+
+    assert len([r for r in ret if r["type"] == "squoredevinfo"]) == 3
     assert len([r for r in ret if r["type"] == "squorelivedata"]) == 2 * 3
     assert len([r for r in ret if r["type"] == "tournament"]) == 2
 
@@ -149,7 +180,7 @@ async def test_get_all_records_keeps_identical_tournaments(
     await dbmanager_inited.record_tournament(TCTournament(name="same"))
     await dbmanager_inited.record_tournament(TCTournament(name="same"))
 
-    ret = [r async for r in dbmanager_inited.get_all_tournament_and_livedata_records()]
+    ret = [r async for r in dbmanager_inited.get_all_stream_records()]
 
     assert len([r for r in ret if r["type"] == "tournament"]) == 2
 

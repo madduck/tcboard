@@ -48,7 +48,11 @@ async def _receive_devinfo(message: Message, *, clictx: CliContext) -> None:
         logger.debug(message.payload)
         return
 
-    logger.debug(f"Received DeviceInfo on {message.topic}: {validated}")
+    logger.debug(
+        f"{'Retained ' if message.retain else 'Received '}"
+        f"DevInfo on {message.topic}: {validated}"
+    )
+
     clictx.itc.set("squoredevinfo", validated)
 
 

@@ -9,6 +9,8 @@ from click_async_plugins import PluginLifespan, plugin
 from tptools.util import silence_logger
 
 from tcboard import TCBoard, TCTournament
+from tcboard.devinfo import DeviceInfo
+from tcboard.ext.squore.devinfo import SquoreDeviceInfo
 from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
 from ..dbmanager import DBManager
@@ -25,12 +27,15 @@ async def receive_updates(
     clictx: CliContext,
     record_tournaments: bool = True,
     record_livedata: bool = True,
+    record_devinfo: bool = True,
 ) -> None:
     sources = []
     if record_tournaments:
         sources.append(clictx.itc.updates("tournament", yield_immediately=True))
     if record_livedata:
         sources.append(clictx.itc.updates("squorelivedata", yield_immediately=True))
+    if record_devinfo:
+        sources.append(clictx.itc.updates("squoredevinfo", yield_immediately=True))
     if not sources:
         return
 
@@ -43,6 +48,8 @@ async def receive_updates(
                 await clictx.dbmgr.record_tournament(event)
             elif isinstance(event, SquoreMatchLiveData):
                 await clictx.dbmgr.record_livedata(event)
+            elif isinstance(event, DeviceInfo):
+                await clictx.dbmgr.record_devinfo(event)
             else:
                 logger.warning(
                     "Received unexpected event "
@@ -57,10 +64,10 @@ async def database_backend(
     file: pathlib.Path | None = DEFAULT_SQLITE_PATH,
     record_tournament_data: bool = True,
     record_livedata: bool = True,
+    record_devinfo: bool = True,
 ) -> PluginLifespan:
+    logger.info(f"Opening database {file}")
     async with DBManager(file=file) as db:
-        logger.info(f"Opening database {file}")
-
         clictx.dbmgr = db
         await db.init_tables()
 
@@ -90,6 +97,16 @@ async def database_backend(
                     should_notify = True
                     logger.info(f"Read {cnt} records of livedata from database")
 
+                cnt = 0
+                async for ldjson in db.get_latest_devinfo_json():
+                    devinfo = SquoreDeviceInfo.model_validate_json(ldjson)
+                    await clictx.board.process_squore_deviceinfo(devinfo)
+                    cnt += 1
+
+                if cnt > 0:
+                    should_notify = True
+                    logger.info(f"Read {cnt} records of devinfo from database")
+
             if should_notify:
                 await clictx.board.update()
 
@@ -102,6 +119,7 @@ async def database_backend(
             clictx,
             record_tournaments=record_tournament_data,
             record_livedata=record_livedata,
+            record_devinfo=record_devinfo,
         )
 
     logger.info(f"Closing database {file}")
@@ -127,12 +145,18 @@ async def database_backend(
     is_flag=True,
     help="Record livedata data as it is received",
 )
+@click.option(
+    "--record-devinfo",
+    is_flag=True,
+    help="Record device info data as it is received",
+)
 @pass_clictx
 async def db(
     clictx: CliContext,
     file: pathlib.Path | Literal[False] | None,
     record_tournament_data: bool,
     record_livedata: bool,
+    record_devinfo: bool,
 ) -> PluginLifespan:
     """Listen to live Squore match data on MQTT"""
 
@@ -141,5 +165,6 @@ async def db(
         file=file or None,
         record_tournament_data=record_tournament_data,
         record_livedata=record_livedata,
+        record_devinfo=record_devinfo,
     ) as task:
         yield task

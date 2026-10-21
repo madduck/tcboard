@@ -21,6 +21,7 @@ from tcboard.cli.replay import (
 )
 from tcboard.cli.util import CliContext
 from tcboard.dbmanager import DBManager
+from tcboard.ext.squore.devinfo import SquoreDeviceInfo
 
 from .conftest import close_if_coro
 
@@ -77,6 +78,28 @@ async def test_replay_events_replays_tournament(
     replayed = process.call_args.args[1]
     assert isinstance(replayed, TCTournament)
     assert replayed.name == tournament.name
+
+
+@pytest.mark.asyncio
+async def test_replay_events_replays_devinfo(
+    clictx: CliContext,
+    dbfile: pathlib.Path,
+    mocker: MockerFixture,
+) -> None:
+    devinfo = SquoreDeviceInfo(
+        deviceid="dev-a", batteryCharging=False, batteryPercentage=100
+    )
+    process = mocker.spy(TCBoard, "process_squore_deviceinfo")
+
+    async with DBManager(file=dbfile) as db:
+        await db.init_tables()
+        await db.record_devinfo(devinfo)
+        await _replay_events(clictx, db, speed=1000)
+
+    process.assert_awaited_once()
+    replayed = process.call_args.args[1]
+    assert isinstance(replayed, SquoreDeviceInfo)
+    assert replayed.deviceid == devinfo.deviceid
 
 
 @pytest.mark.asyncio

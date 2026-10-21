@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from tcboard.board import TCBoard
 
+from .devinfo import DeviceInfo
 from .livedata import LiveData
 from .tournament import TCTournament
 
@@ -30,7 +31,7 @@ _TABLE_SQL = re.sub(
     flags=re.MULTILINE,
 )
 
-TABLENAMES = ["squorelivedata", "tournament", "board"]
+TABLENAMES = ["squorelivedata", "squoredevinfo", "tournament", "board"]
 
 
 class DBManager(AbstractAsyncContextManager["DBManager"]):
@@ -121,6 +122,19 @@ class DBManager(AbstractAsyncContextManager["DBManager"]):
             )
             return None
 
+    async def record_devinfo(self, devinfo: DeviceInfo) -> int | None:
+        try:
+            ret = await self.insert_json_record("squoredevinfo", devinfo)
+            logger.debug(f"Recording device info in DB with ID {ret}: {devinfo}")
+            return ret
+
+        except RuntimeError:  # pragma no cover — don't know how to test for this
+            logger.debug(
+                "Recorded no device info, since there wasn't "
+                f"anything to record: {devinfo!r}"
+            )
+            return None
+
     async def record_board_state(self, board: TCBoard) -> int | None:
         try:
             ret = await self.insert_json_record("board", board)
@@ -179,18 +193,42 @@ class DBManager(AbstractAsyncContextManager["DBManager"]):
             async for rec in cursor:
                 logger.info(
                     "Read from database latest livedata for match "
-                    f"{rec['matchid']} on {rec['court']} "
+                    f"{rec['matchid']}, court ID {rec['court']} "
                     f"(timestamp: {rec['timestamp']})"
                 )
                 yield rec["data"]
 
-    async def get_all_tournament_and_livedata_records(
+    async def get_latest_devinfo_json(
+        self,
+    ) -> AsyncGenerator[str]:
+        async with self.execute("""
+             select m.deviceid, d.* from squoredevinfo as d
+               join json_each(d.data, '$.deviceid') as j
+               join (
+                 select data->>'deviceid' as deviceid,
+                        max(id) as highest_id
+                   from squoredevinfo group by deviceid
+              ) as m
+              on (m.deviceid = j.value and m.highest_id = d.id)
+              order by d.timestamp;
+        """) as cursor:
+            async for rec in cursor:
+                logger.info(
+                    "Read from database latest devinfo for device "
+                    f"{rec['deviceid']} "
+                    f"(timestamp: {rec['timestamp']})"
+                )
+                yield rec["data"]
+
+    async def get_all_stream_records(
         self,
     ) -> AsyncGenerator[dict[str, Any]]:
         async with self.execute(  # TODO:
             "select timestamp, 'tournament' as type, data from tournament "
             "union all "
             "select timestamp, 'squorelivedata' as type, data from squorelivedata "
+            "union all "
+            "select timestamp, 'squoredevinfo' as type, data from squoredevinfo "
             "order by timestamp"
         ) as cursor:
             async for rec in cursor:

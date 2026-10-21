@@ -18,6 +18,7 @@ from tcboard.cli.db import (
 )
 from tcboard.cli.util import CliContext
 from tcboard.dbmanager import DBManager
+from tcboard.devinfo import DeviceInfo
 from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
 from .conftest import cancel, close_if_coro, wait_until
@@ -29,7 +30,12 @@ from .conftest import cancel, close_if_coro, wait_until
 async def test_receive_updates_returns_immediately_if_nothing_to_record(
     clictx: CliContext,
 ) -> None:
-    await receive_updates(clictx, record_tournaments=False, record_livedata=False)
+    await receive_updates(
+        clictx,
+        record_tournaments=False,
+        record_livedata=False,
+        record_devinfo=False,
+    )
 
 
 @pytest.mark.asyncio
@@ -74,6 +80,25 @@ async def test_receive_updates_records_tournament_and_livedata(
 
     record_t.assert_awaited_with(tournament)
     record_l.assert_awaited_with(livedata)
+
+
+@pytest.mark.asyncio
+async def test_receive_updates_records_devinfo(
+    clictx: CliContext,
+    deviceinfo: DeviceInfo,
+    mocker: MockerFixture,
+) -> None:
+    record_d = mocker.patch.object(DBManager, "record_devinfo", new=AsyncMock())
+    clictx.itc.set("squoredevinfo", deviceinfo)
+
+    async with DBManager(file=None) as dbmgr:
+        await dbmgr.init_tables()
+        clictx.dbmgr = dbmgr
+        task = asyncio.create_task(receive_updates(clictx, record_tournaments=False))
+        await wait_until(lambda: record_d.await_count > 0)
+        await cancel(task)
+
+    record_d.assert_awaited_with(deviceinfo)
 
 
 @pytest.mark.asyncio
@@ -143,6 +168,32 @@ async def test_database_backend_rebuilds_from_tournament_and_livedata(
 
     process_t.assert_awaited_once()
     process_ld.assert_awaited_once_with("livedata")
+    update.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_database_backend_rebuilds_devinfo(
+    clictx: CliContext,
+    deviceinfo: DeviceInfo,
+    tmp_path: pathlib.Path,
+    mocker: MockerFixture,
+) -> None:
+    dbfile = tmp_path / "db.sqlite"
+    async with DBManager(file=dbfile) as dbmgr:
+        await dbmgr.init_tables()
+        await dbmgr.record_devinfo(deviceinfo)
+
+    process_di = mocker.patch.object(
+        TCBoard, "process_squore_deviceinfo", new=AsyncMock()
+    )
+    update = mocker.patch.object(TCBoard, "update", new=AsyncMock())
+
+    async with database_backend(clictx, file=dbfile) as task:
+        close_if_coro(task)
+
+    process_di.assert_awaited_once()
+    assert process_di.await_args is not None
+    assert process_di.await_args.args[0].deviceid == deviceinfo.deviceid
     update.assert_awaited_once()
 
 
