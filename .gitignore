@@ -2,7 +2,7 @@
 __pycache__
 .*.sw?
 *.py[oc]
-/.envrc
+/.envrc.local
 .coverage
 *.sqlite
 /.venv
