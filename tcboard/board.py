@@ -360,7 +360,7 @@ class TCBoard(BaseModel[None]):
 
             if (
                 c := self.court_by_deviceid.get(data.deviceid)
-            ) != matchstate.match.court:
+            ) != matchstate.match.court and c is not None:
                 logger.warning(
                     f"Device {data.deviceid} was previously broadcasting about court "
                     f"{c} and is now sending about {matchstate.match.court} "
