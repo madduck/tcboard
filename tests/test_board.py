@@ -87,6 +87,7 @@ from tptools import MatchStatus  # noqa: E402
 
 from tcboard.devinfo import DeviceInfo  # noqa: E402
 from tcboard.exceptions import EntityNotFoundError  # noqa: E402
+from tcboard.ext.squore.devinfo import SquoreDeviceInfo  # noqa: E402
 from tcboard.ext.tptools.livedata import TPData  # noqa: E402
 from tcboard.livestatus import LiveStatus  # noqa: E402
 from tcboard.matchstate import MatchState  # noqa: E402
@@ -249,6 +250,102 @@ def test_set_scoredev_without_tournament_is_noop(
     tcboard.tournament = None
     tcboard.set_scoredev_for_court(court1, "dev")  # must not raise
     assert tcboard.tournament is None
+
+
+# ---------------------------------------------------------------------------
+# process_squore_deviceinfo
+# ---------------------------------------------------------------------------
+
+
+def devinfo(**kwargs: Any) -> SquoreDeviceInfo:
+    defaults: dict[str, Any] = {
+        "deviceid": "dev",
+        "batteryCharging": False,
+        "batteryPercentage": 50,
+        "customData": {"court": {"id": 1, "name": "Court 1"}},
+    }
+    return SquoreDeviceInfo(**defaults | kwargs)
+
+
+@pytest.mark.asyncio
+async def test_deviceinfo_records_court_for_device(
+    tcboard: TCBoard, court1: _Court
+) -> None:
+    await tcboard.process_squore_deviceinfo(devinfo(deviceid="dev-a"))
+    assert tcboard.court_by_deviceid["dev-a"] == court1
+    assert tcboard.tournament is not None
+    assert tcboard.tournament.courts[court1.id].scoredev == "dev-a"
+
+
+@pytest.mark.asyncio
+async def test_deviceinfo_ignores_already_known_device(
+    tcboard: TCBoard, court1: _Court, mocker: MockerFixture
+) -> None:
+    tcboard.court_by_deviceid["dev-a"] = court1
+    info = mocker.patch("tcboard.board.logger.info")
+    await tcboard.process_squore_deviceinfo(devinfo(deviceid="dev-a"))
+    assert tcboard.court_by_deviceid["dev-a"] == court1
+    assert not any("Recording device" in str(c.args[0]) for c in info.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_deviceinfo_without_deviceid_is_ignored(
+    tcboard: TCBoard, mocker: MockerFixture
+) -> None:
+    post = mocker.patch.object(tcboard, "_post_update", autospec=True)
+    await tcboard.process_squore_deviceinfo(devinfo(deviceid=None))
+    assert tcboard.court_by_deviceid == {}
+    post.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_deviceinfo_without_customdata_is_ignored(
+    tcboard: TCBoard,
+) -> None:
+    await tcboard.process_squore_deviceinfo(devinfo(customData=None))
+    assert tcboard.court_by_deviceid == {}
+
+
+@pytest.mark.asyncio
+async def test_deviceinfo_without_court_key_is_ignored(
+    tcboard: TCBoard,
+) -> None:
+    await tcboard.process_squore_deviceinfo(devinfo(customData={}))
+    assert tcboard.court_by_deviceid == {}
+
+
+@pytest.mark.asyncio
+async def test_deviceinfo_resolves_court_from_tournament(
+    tcboard: TCBoard, court1: _Court
+) -> None:
+    # An incomplete court record fails validation and is looked up by id.
+    await tcboard.process_squore_deviceinfo(
+        devinfo(deviceid="dev-b", customData={"court": {"id": court1.id}})
+    )
+    assert tcboard.court_by_deviceid["dev-b"] == court1
+
+
+@pytest.mark.asyncio
+async def test_deviceinfo_warns_when_court_unresolvable(
+    tcboard: TCBoard, mocker: MockerFixture
+) -> None:
+    warn = mocker.patch("tcboard.board.logger.warning")
+    await tcboard.process_squore_deviceinfo(
+        devinfo(deviceid="dev-c", customData={"court": {"id": 999}})
+    )
+    assert tcboard.court_by_deviceid == {}
+    assert any("Cannot resolve court" in str(c.args[0]) for c in warn.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_deviceinfo_without_tournament_does_not_resolve(
+    tcboard: TCBoard,
+) -> None:
+    tcboard.tournament = None
+    await tcboard.process_squore_deviceinfo(
+        devinfo(deviceid="dev-d", customData={"court": {"id": 1}})
+    )
+    assert tcboard.court_by_deviceid == {}
 
 
 # ---------------------------------------------------------------------------
