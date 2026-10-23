@@ -1,12 +1,9 @@
 /.*_cache
 __pycache__
-/.stfolder
 .*.sw?
 *.py[oc]
-/.stignore
 /.envrc
 .coverage
 *.sqlite
-/.direnv
 /.venv
 *.dev_court_map.toml
