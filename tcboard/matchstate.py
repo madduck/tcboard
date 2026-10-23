@@ -191,13 +191,9 @@ class MatchState(
             case MatchSlot.PENDING:
                 return self.match.time
             case MatchSlot.CURRENT:
-                if self.livedata is None:
-                    raise ValueError("No livedata, no starttime")
-                return self.livedata.starttime
+                return self.livedata.starttime  # type: ignore[union-attr]
             case MatchSlot.FINISHED:
-                if self.livedata is None:
-                    raise ValueError("No livedata, no endtime")
-                return self.livedata.endtime
+                return self.livedata.endtime  # type: ignore[union-attr]
             case _:
                 return None
 
