@@ -65,12 +65,12 @@ async def test_replay_events_replays_tournament(
     dbfile: pathlib.Path,
     mocker: MockerFixture,
 ) -> None:
+    process = mocker.spy(TCBoard, "process_tournament")
     async with DBManager(file=dbfile) as db:
         await db.init_tables()
         await db.record_tournament(tournament)
 
         clictx.board.tournament = None
-        process = mocker.spy(TCBoard, "process_tournament")
         await _replay_events(clictx, db, speed=1000)
 
     process.assert_awaited_once()
@@ -86,6 +86,14 @@ async def test_replay_events_replays_multiple_records_with_delays(
     dbfile: pathlib.Path,
     mocker: MockerFixture,
 ) -> None:
+    sleep = mocker.patch("tcboard.cli.replay.asyncio.sleep", new=AsyncMock())
+    live = mocker.patch("tcboard.cli.replay.SquoreMatchLiveData")
+    live.model_validate_json.return_value = "livedata-stub"
+    process_ld = mocker.patch.object(
+        TCBoard, "process_squore_livedata", new=AsyncMock()
+    )
+    mocker.patch.object(TCBoard, "process_tournament", new=AsyncMock())
+
     async with DBManager(file=dbfile) as db:
         await db.init_tables()
         await db.record_tournament(tournament)
@@ -95,14 +103,6 @@ async def test_replay_events_replays_multiple_records_with_delays(
             "insert into squorelivedata (timestamp, data) values "
             "('2020-01-01 00:00:00.000', '{}'), ('2020-01-01 00:00:02.000', '{}')"
         )
-        sleep = mocker.patch("tcboard.cli.replay.asyncio.sleep", new=AsyncMock())
-        live = mocker.patch("tcboard.cli.replay.SquoreMatchLiveData")
-        live.model_validate_json.return_value = "livedata-stub"
-        process_ld = mocker.patch.object(
-            TCBoard, "process_squore_livedata", new=AsyncMock()
-        )
-        mocker.patch.object(TCBoard, "process_tournament", new=AsyncMock())
-
         await _replay_events(clictx, db, speed=2)
 
     delays = [c.args[0] for c in sleep.await_args_list]
@@ -135,8 +135,8 @@ async def test_replay_events_does_not_enter_debugger_on_alert_change(
         mocker.patch.object(TCBoard, "process_tournament", new=_process_and_raise_alert)
         await _replay_events(clictx, db, speed=1000)
 
-    fake_ipdb.set_trace.assert_not_called()
-    assert clictx.board.alerts_by_courtid[court.id]
+        fake_ipdb.set_trace.assert_not_called()
+        assert clictx.board.alerts_by_courtid[court.id]
 
 
 @pytest.mark.asyncio
