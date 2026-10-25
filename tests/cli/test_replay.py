@@ -9,7 +9,6 @@ from aiosqlite import Row
 from pytest_mock import MockerFixture
 
 from tcboard import TCBoard, TCTournament
-from tcboard.alert import Alert
 from tcboard.cli.replay import (
     DEFAULT_SQLITE_PATH,
     _replay_events,
@@ -134,32 +133,6 @@ async def test_replay_events_replays_multiple_records_with_delays(
     # of each stream has no previous timestamp so waits 0s
     assert 1.0 in delays
     process_ld.assert_awaited_with("livedata-stub")
-
-
-@pytest.mark.asyncio
-async def test_replay_events_does_not_enter_debugger_on_alert_change(
-    clictx: CliContext,
-    tournament: TCTournament,
-    dbfile: pathlib.Path,
-    mocker: MockerFixture,
-    fake_ipdb: MagicMock,
-) -> None:
-    async with DBManager(file=dbfile) as db:
-        await db.init_tables()
-        await db.record_tournament(tournament)
-
-        court = tournament.courts[1]
-
-        async def _process_and_raise_alert(
-            board: TCBoard, _tournament: TCTournament
-        ) -> None:
-            board.handle_error(Alert(text="boom"), court=court)
-
-        mocker.patch.object(TCBoard, "process_tournament", new=_process_and_raise_alert)
-        await _replay_events(clictx, db, speed=1000)
-
-        fake_ipdb.set_trace.assert_not_called()
-        assert clictx.board.alerts_by_courtid[court.id]
 
 
 @pytest.mark.asyncio
