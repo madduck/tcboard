@@ -16,9 +16,9 @@ from tptools import Court
 from tcboard.tournament import TCTournament
 
 from ..board import TCBoard
-from ..dbmanager import DBManager
 
 if TYPE_CHECKING:
+    from ..dbmanager import DBManager
     from .ws import WSHandler
 
 
