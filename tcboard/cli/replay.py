@@ -11,6 +11,7 @@ from aiosqlite import Cursor, Row
 from click_async_plugins import PluginLifespan, plugin
 from cloup.constraints import mutually_exclusive
 from dateutil.parser import parser as dtparser
+from httpx2 import ASGITransport, AsyncClient
 from tptools.util import silence_logger
 
 from tcboard.ext.squore.devinfo import SquoreDeviceInfo
@@ -71,35 +72,40 @@ async def _replay_events(
     dtparse = dtparser().parse
     board = clictx.board
 
-    async for rec in db.get_all_stream_records():
-        ts = dtparse(rec["timestamp"])
-        if delay is None:
-            await asyncio.sleep((ts - (ts_prev or ts)).total_seconds() / speed)
-        else:
-            await asyncio.sleep(delay)
+    transport = ASGITransport(app=clictx.api)
+    async with AsyncClient(transport=transport, base_url="/") as client:
+        async for rec in db.get_all_stream_records():
+            ts = dtparse(rec["timestamp"])
+            if delay is None:
+                await asyncio.sleep((ts - (ts_prev or ts)).total_seconds() / speed)
+            else:
+                await asyncio.sleep(delay)
 
-        logger.info(f"Replaying {rec['type']} @ {ts.isoformat()}")
+            logger.info(f"Replaying {rec['type']} @ {ts.isoformat()}")
 
-        match rec["type"]:
-            case "tournament":
-                await board.process_tournament(
-                    TCTournament.model_validate_json(rec["data"])
-                )
+            match rec["type"]:
+                case "tournament":
+                    await board.process_tournament(
+                        TCTournament.model_validate_json(rec["data"])
+                    )
 
-            case "squorelivedata":
-                await board.process_squore_livedata(
-                    SquoreMatchLiveData.model_validate_json(rec["data"])
-                )
+                case "squorelivedata":
+                    await board.process_squore_livedata(
+                        SquoreMatchLiveData.model_validate_json(rec["data"])
+                    )
 
-            case "squoredevinfo":
-                await board.process_squore_deviceinfo(
-                    SquoreDeviceInfo.model_validate_json(rec["data"])
-                )
+                case "squoredevinfo":
+                    await board.process_squore_deviceinfo(
+                        SquoreDeviceInfo.model_validate_json(rec["data"])
+                    )
 
-            case "apicall":
-                _ = APICall.model_validate_json(rec["data"])
+                case "apicall":
+                    apicall = APICall.model_validate_json(rec["data"])
+                    await client.request(
+                        apicall.method, "/api/v1" + apicall.interpolated_path
+                    )
 
-        ts_prev = ts
+            ts_prev = ts
 
 
 @asynccontextmanager

@@ -9,6 +9,7 @@ from aiosqlite import Row
 from pytest_mock import MockerFixture
 
 from tcboard import TCBoard, TCTournament
+from tcboard.apicall import APICall
 from tcboard.cli.replay import (
     DEFAULT_SQLITE_PATH,
     _replay_events,
@@ -35,6 +36,22 @@ def fake_ipdb(mocker: MockerFixture) -> MagicMock:
 @pytest.fixture
 def dbfile(tmp_path: pathlib.Path) -> pathlib.Path:
     return tmp_path / "replay.sqlite"
+
+
+class FakeAsyncClient:
+    """Stand-in for the ASGI client that records replayed API calls."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.requests: list[tuple[str, str]] = []
+
+    async def __aenter__(self) -> "FakeAsyncClient":
+        return self
+
+    async def __aexit__(self, *exc: Any) -> bool:
+        return False
+
+    async def request(self, method: str, url: str) -> None:
+        self.requests.append((method, url))
 
 
 def test_sqlite_dict_factory() -> None:
@@ -102,6 +119,24 @@ async def test_replay_events_replays_devinfo(
 
 
 @pytest.mark.asyncio
+async def test_replay_events_replays_apicall(
+    clictx: CliContext,
+    apicall: APICall,
+    dbfile: pathlib.Path,
+    mocker: MockerFixture,
+) -> None:
+    fake = FakeAsyncClient()
+    mocker.patch("tcboard.cli.replay.AsyncClient", return_value=fake)
+
+    async with DBManager(file=dbfile) as db:
+        await db.init_tables()
+        await db.record_apicall(apicall)
+        await _replay_events(clictx, db, speed=1000)
+
+    assert fake.requests == [(apicall.method, "/api/v1" + apicall.interpolated_path)]
+
+
+@pytest.mark.asyncio
 async def test_replay_events_replays_multiple_records_with_delays(
     clictx: CliContext,
     tournament: TCTournament,
@@ -133,6 +168,23 @@ async def test_replay_events_replays_multiple_records_with_delays(
     # of each stream has no previous timestamp so waits 0s
     assert 1.0 in delays
     process_ld.assert_awaited_with("livedata-stub")
+
+
+@pytest.mark.asyncio
+async def test_replay_events_uses_fixed_delay(
+    clictx: CliContext,
+    tournament: TCTournament,
+    dbfile: pathlib.Path,
+    mocker: MockerFixture,
+) -> None:
+    sleep = mocker.patch("tcboard.cli.replay.asyncio.sleep", new=AsyncMock())
+
+    async with DBManager(file=dbfile) as db:
+        await db.init_tables()
+        await db.record_tournament(tournament)
+        await _replay_events(clictx, db, speed=1000, delay=0.25)
+
+    sleep.assert_awaited_once_with(0.25)
 
 
 @pytest.mark.asyncio
