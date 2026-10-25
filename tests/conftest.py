@@ -19,6 +19,7 @@ from tptools import (
 
 from tcboard import TCBoard, TCMatch, TCTournament
 from tcboard.alert import Alert
+from tcboard.apicall import APICall
 from tcboard.dbmanager import DBManager
 from tcboard.devinfo import DeviceInfo
 from tcboard.game import Game
@@ -259,3 +260,12 @@ def tournament(
 @pytest.fixture
 def tcboard(tournament: TCTournament) -> TCBoard:
     return TCBoard(tournament=tournament)
+
+
+@pytest.fixture
+def apicall() -> APICall:
+    return APICall(
+        method="GET",
+        path="/user/{userid:int}/{action}",
+        params={"userid": 14, "action": "update"},
+    )
