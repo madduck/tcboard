@@ -23,6 +23,24 @@ logger = logging.getLogger(__name__)
 silence_logger("aiosqlite", level=logging.WARNING)
 
 
+async def _handle_event(dbmgr: DBManager, event: Any) -> None:
+    match event:
+        case TCTournament():
+            await dbmgr.record_tournament(event)
+        case SquoreMatchLiveData():
+            await dbmgr.record_livedata(event)
+        case DeviceInfo():
+            await dbmgr.record_devinfo(event)
+        case None:
+            pass
+        case _:
+            logger.warning(
+                "Received unexpected event "
+                f"of type {event.__class__.__qualname__}: {event}"
+            )
+    return
+
+
 async def receive_updates(
     clictx: CliContext,
     record_tournaments: bool = True,
@@ -42,19 +60,7 @@ async def receive_updates(
     clictx.dbmgr = cast(DBManager, clictx.dbmgr)
     async with aiostream.stream.merge(*sources).stream() as events_gen:
         async for event in events_gen:
-            if event is None:
-                continue
-            elif isinstance(event, TCTournament):
-                await clictx.dbmgr.record_tournament(event)
-            elif isinstance(event, SquoreMatchLiveData):
-                await clictx.dbmgr.record_livedata(event)
-            elif isinstance(event, DeviceInfo):
-                await clictx.dbmgr.record_devinfo(event)
-            else:
-                logger.warning(
-                    "Received unexpected event "
-                    f"of type {event.__class__.__qualname__}: {event}"
-                )
+            await _handle_event(clictx.dbmgr, event)
 
 
 @asynccontextmanager
