@@ -16,10 +16,11 @@ from pydantic import UUID4
 from starlette.status import HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 from tptools import Court
 
+from tcboard.board import TCBoard
 from tcboard.cli.util import get_remote
 
 from ..exceptions import EntityNotFoundError
-from .util import CliContext, get_clictx, get_courts, pass_clictx
+from .util import CliContext, get_board, get_courts, pass_clictx
 
 API_PATH_VERSION = "v1"
 API_MOUNTPOINT = "/api"
@@ -61,11 +62,11 @@ async def courts(
 @apiapp.patch("/match/ack/{matchid}")
 async def match_ack(
     matchid: Annotated[str, Path(title="The ID of the match to ack")],
-    clictx: Annotated[CliContext, Depends(get_clictx)],
+    board: Annotated[TCBoard, Depends(get_board)],
 ) -> Response:
     try:
         logger.info(f"Acking match {matchid}")
-        await clictx.board.ack_match(matchid)
+        await board.ack_match(matchid)
 
     except EntityNotFoundError as exc:
         raise HTTPException(HTTP_404_NOT_FOUND, f"No match with ID {matchid}") from exc
@@ -77,11 +78,11 @@ async def match_ack(
 @apiapp.patch("/match/unack/{matchid}")
 async def match_unack(
     matchid: Annotated[str, Path(title="The ID of the match to unack")],
-    clictx: Annotated[CliContext, Depends(get_clictx)],
+    board: Annotated[TCBoard, Depends(get_board)],
 ) -> Response:
     try:
         logger.info(f"Unacking match {matchid}")
-        await clictx.board.ack_match(matchid, acked=False)
+        await board.ack_match(matchid, acked=False)
 
     except EntityNotFoundError as exc:
         raise HTTPException(HTTP_404_NOT_FOUND, f"No match with ID {matchid}") from exc
@@ -93,11 +94,11 @@ async def match_unack(
 @apiapp.patch("/match/reset/{matchid}")
 async def match_reset(
     matchid: Annotated[str, Path(title="The ID of the match to ack")],
-    clictx: Annotated[CliContext, Depends(get_clictx)],
+    board: Annotated[TCBoard, Depends(get_board)],
 ) -> Response:
     try:
         logger.info(f"Resetting match {matchid}")
-        await clictx.board.reset_match(matchid)
+        await board.reset_match(matchid)
 
     except EntityNotFoundError as exc:
         raise HTTPException(HTTP_404_NOT_FOUND, f"No match with ID {matchid}") from exc
@@ -110,11 +111,11 @@ async def match_reset(
 async def alert_clear(
     courtid: Annotated[int, Path(title="The ID of the court of the alert to clear")],
     alertid: Annotated[UUID4, Path(title="The ID of the alert to clear")],
-    clictx: Annotated[CliContext, Depends(get_clictx)],
+    board: Annotated[TCBoard, Depends(get_board)],
 ) -> Response:
     try:
         logger.info(f"Clearing alert on court with ID {courtid}: {alertid}")
-        await clictx.board.clear_alert(courtid, alertid)
+        await board.clear_alert(courtid, alertid)
 
     except EntityNotFoundError as exc:
         raise HTTPException(
