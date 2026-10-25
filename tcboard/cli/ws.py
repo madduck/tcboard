@@ -438,19 +438,6 @@ async def get_schema() -> JSONResponse:
     )
 
 
-def process_tcboard_event(
-    board: TCBoard, curdata: DisplayData | None
-) -> DisplayData | None:
-    newdata = DisplayData(
-        rev=board.rev,
-        courtstates=list(board.get_courtstates_by_court().values()),
-    )
-    if curdata != newdata:
-        return newdata.model_copy(deep=True)
-    else:
-        return None
-
-
 @wsapp.websocket("/")
 async def websocket(
     websocket: WebSocket,
@@ -476,10 +463,13 @@ async def websocket(
                 match event:
                     case TCBoard():
                         try:
-                            if (
-                                newdata := process_tcboard_event(event, data)
-                            ) is not None:
-                                data = newdata
+                            if data is None or event.rev > data.rev:
+                                data = DisplayData(
+                                    rev=event.rev,
+                                    courtstates=list(
+                                        event.get_courtstates_by_court().values()
+                                    ),
+                                )
                             else:
                                 logger.debug(
                                     f"Board data unchanged for {wshandler.peer}, "

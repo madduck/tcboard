@@ -50,7 +50,6 @@ from tcboard.cli.ws import (
     get_tournament_ws,
     get_websocket_peer,
     interval_generator,
-    process_tcboard_event,
 )
 from tcboard.cli.ws import (
     websocket as ws_endpoint,
@@ -420,17 +419,6 @@ def test_displaydata_serializer_filters_by_courtids(
     only_court1 = json.loads(data.model_dump_json(context={"courtids": [1]}))
     ids = [cs["courtid"] for cs in only_court1["courtstates"]]
     assert ids == [1]
-
-
-def test_process_tcboard_event_detects_change(board: TCBoard) -> None:
-    first = process_tcboard_event(board, None)
-    assert isinstance(first, DisplayData)
-    # identical state -> no new data
-    assert process_tcboard_event(board, first) is None
-    # changed revision -> new data
-    board.rev += 1
-    second = process_tcboard_event(board, first)
-    assert second is not None and second.rev == board.rev
 
 
 @pytest.mark.asyncio
