@@ -6,14 +6,17 @@ from datetime import datetime
 from typing import Any
 
 import click
+import click_extra as clickx
 from aiosqlite import Cursor, Row
 from click_async_plugins import PluginLifespan, plugin
+from cloup.constraints import mutually_exclusive
 from dateutil.parser import parser as dtparser
 from tptools.util import silence_logger
 
 from tcboard.ext.squore.devinfo import SquoreDeviceInfo
 from tcboard.ext.squore.livedata import SquoreMatchLiveData
 
+from ..apicall import APICall
 from ..dbmanager import DBManager
 from ..tournament import TCTournament
 from .util import CliContext, pass_clictx
@@ -61,14 +64,19 @@ def _sqlite_dict_factory(cursor: Cursor, row: Row) -> dict[str, Any]:
 #
 
 
-async def _replay_events(clictx: CliContext, db: DBManager, speed: float) -> None:
+async def _replay_events(
+    clictx: CliContext, db: DBManager, speed: float, delay: float | None = None
+) -> None:
     ts_prev: datetime | None = None
     dtparse = dtparser().parse
     board = clictx.board
+
     async for rec in db.get_all_stream_records():
         ts = dtparse(rec["timestamp"])
-        delay = ts - (ts_prev or ts)
-        await asyncio.sleep(delay.total_seconds() / speed)
+        if delay is None:
+            await asyncio.sleep((ts - (ts_prev or ts)).total_seconds() / speed)
+        else:
+            await asyncio.sleep(delay)
 
         logger.info(f"Replaying {rec['type']} @ {ts.isoformat()}")
 
@@ -88,6 +96,9 @@ async def _replay_events(clictx: CliContext, db: DBManager, speed: float) -> Non
                     SquoreDeviceInfo.model_validate_json(rec["data"])
                 )
 
+            case "apicall":
+                _ = APICall.model_validate_json(rec["data"])
+
         ts_prev = ts
 
 
@@ -96,10 +107,11 @@ async def database_backend(
     clictx: CliContext,
     *,
     speed: float = 1,
+    delay: float | None = None,
     file: pathlib.Path = DEFAULT_SQLITE_PATH,
 ) -> PluginLifespan:
     async with DBManager(file=file) as dbmgr:
-        yield _replay_events(clictx, dbmgr, speed)
+        yield _replay_events(clictx, dbmgr, speed, delay)
 
 
 @plugin
@@ -112,20 +124,35 @@ async def database_backend(
     show_default=True,
     help="SQLite database to persist events",
 )
-@click.option(
-    "--speed",
-    "-s",
-    metavar="SPEEDUP_FACTOR",
-    default=1,
-    type=float,
-    show_default=True,
-    help="Factor to speed up replay if desired",
+@clickx.option_group(
+    "Replay factors",
+    click.option(
+        "--speed",
+        "-s",
+        metavar="SPEEDUP_FACTOR",
+        default=1,
+        type=click.FloatRange(min=0, min_open=True),
+        show_default=True,
+        help="Factor to speed up replay if desired",
+    ),
+    click.option(
+        "--fixed-delay",
+        "-d",
+        metavar="FIXED_DELAY",
+        default=None,
+        type=click.FloatRange(min=0),
+        show_default=True,
+        help="Fixed delay between events",
+    ),
+    constraint=mutually_exclusive,
+    help="Options that govern how and how quickly events are replayed",
 )
 @pass_clictx
 async def replay(
     clictx: CliContext,
     file: pathlib.Path,
     speed: float,
+    fixed_delay: float | None,
 ) -> PluginLifespan:
     """Replay events from database"""
 
@@ -133,5 +160,6 @@ async def replay(
         clictx,
         file=file,
         speed=speed,
+        delay=fixed_delay,
     ) as task:
         yield task
