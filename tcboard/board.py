@@ -269,10 +269,9 @@ class TCBoard(BaseModel[None]):
                 )
                 ms.acked = False
 
-        else:
-            # There is livedata, but upstream has no comparable scores and yet
-            # reports the match as settled (played or not played). TP and the
-            # live state disagree about a settled match, so alert the user.
+        elif ms.match.status != MatchStatus.READY:
+            # There is livedata, but upstream has no comparable scores, so the
+            # game is READY, and if it's not, there is a problem, so alert the user.
             self.handle_error(
                 Alert(
                     text="Upstream match conflicts with live state",
