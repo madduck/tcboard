@@ -1,6 +1,7 @@
 import pytest
 from pydantic import BaseModel
 
+from tcboard.apicall import APICall
 from tcboard.board import TCBoard
 from tcboard.dbmanager import TABLENAMES, DBManager
 from tcboard.devinfo import DeviceInfo
@@ -91,6 +92,11 @@ async def test_record_devinfo(
     dbmanager_inited: DBManager, deviceinfo: DeviceInfo
 ) -> None:
     assert await dbmanager_inited.record_devinfo(deviceinfo) == 1
+
+
+@pytest.mark.asyncio
+async def test_record_apicall(dbmanager_inited: DBManager, apicall: APICall) -> None:
+    assert await dbmanager_inited.record_apicall(apicall) == 1
 
 
 @pytest.mark.asyncio

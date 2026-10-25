@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from tcboard.board import TCBoard
 
+from .apicall import APICall
 from .devinfo import DeviceInfo
 from .livedata import LiveData
 from .tournament import TCTournament
@@ -31,7 +32,7 @@ _TABLE_SQL = re.sub(
     flags=re.MULTILINE,
 )
 
-TABLENAMES = ["squorelivedata", "squoredevinfo", "tournament", "board"]
+TABLENAMES = ["squorelivedata", "squoredevinfo", "tournament", "apicall", "board"]
 
 
 class DBManager(AbstractAsyncContextManager["DBManager"]):
@@ -135,6 +136,19 @@ class DBManager(AbstractAsyncContextManager["DBManager"]):
             )
             return None
 
+    async def record_apicall(self, apicall: APICall) -> int | None:
+        try:
+            ret = await self.insert_json_record("apicall", apicall)
+            logger.debug(f"Recording API call in DB with ID {ret}: {apicall}")
+            return ret
+
+        except RuntimeError:  # pragma no cover — don't know how to test for this
+            logger.debug(
+                "Recorded no API call, since there wasn't "
+                f"anything to record: {apicall!r}"
+            )
+            return None
+
     async def record_board_state(self, board: TCBoard) -> int | None:
         try:
             ret = await self.insert_json_record("board", board)
@@ -229,6 +243,8 @@ class DBManager(AbstractAsyncContextManager["DBManager"]):
             "select timestamp, 'squorelivedata' as type, data from squorelivedata "
             "union all "
             "select timestamp, 'squoredevinfo' as type, data from squoredevinfo "
+            "union all "
+            "select timestamp, 'apicall' as type, data from apicall "
             "order by timestamp"
         ) as cursor:
             async for rec in cursor:

@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, cast
 
 import click
 from click_async_plugins import PluginLifespan, plugin
@@ -9,16 +9,20 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Path,
+    Request,
     Response,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import UUID4
+from starlette.middleware.base import RequestResponseEndpoint
 from starlette.status import HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 from tptools import Court
 
 from tcboard.board import TCBoard
 from tcboard.cli.util import get_remote
+from tcboard.dbmanager import DBManager
 
+from ..apicall import APICall
 from ..exceptions import EntityNotFoundError
 from .util import CliContext, get_board, get_courts, pass_clictx
 
@@ -29,6 +33,27 @@ logger = logging.getLogger(__name__)
 
 
 apiapp = FastAPI()
+
+
+@apiapp.middleware("http")
+async def log_to_database(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
+    response = await call_next(request)
+
+    if (
+        dbmgr := cast(DBManager | None, request.app.state.clictx.dbmgr)
+    ) is not None and (route := request.scope.get("route")) is not None:
+        await dbmgr.record_apicall(
+            APICall(
+                method=request.method,
+                path=route.path,
+                params=request.path_params,
+            )
+        )
+
+    return response
+
 
 apiapp.add_middleware(
     CORSMiddleware,

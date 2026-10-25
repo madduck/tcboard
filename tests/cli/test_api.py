@@ -16,6 +16,7 @@ from tcboard.cli.api import (
     api as api_plugin,
 )
 from tcboard.cli.util import CliContext
+from tcboard.dbmanager import DBManager
 from tcboard.exceptions import EntityNotFoundError
 from tcboard.matchstate import MatchState
 
@@ -154,3 +155,20 @@ async def test_api_plugin_with_custom_mountpoint(
 def test_unknown_match_id_returns_404(apiclient: TestClient, path: str) -> None:
     resp = TestClient(apiapp, raise_server_exceptions=False).patch(path)
     assert resp.status_code == 404
+
+
+def test_middleware_records_apicall(
+    apiclient: TestClient,
+    clictx: CliContext,
+    dbmanager_inited: DBManager,
+    mocker: MockerFixture,
+) -> None:
+    clictx.dbmgr = dbmanager_inited
+    record = mocker.spy(dbmanager_inited, "record_apicall")
+
+    resp = apiclient.get("/courts")
+
+    assert resp.status_code == 200
+    record.assert_awaited_once()
+    recorded = record.call_args.args[0]
+    assert recorded.method == "GET"
