@@ -186,14 +186,14 @@ def test_get_websocket_peer_without_client_port(wsocket: FakeWebSocket) -> None:
 async def test_interval_generator_without_interval_yields_once() -> None:
     async with interval_generator(interval=None, yld="once").stream() as s:
         items = [x async for x in s]
-    assert items == ["once"]
+        assert items == ["once"]
 
 
 @pytest.mark.asyncio
 async def test_interval_generator_skip_applies() -> None:
     async with interval_generator(interval=None, yld="once", skip=1).stream() as s:
         items = [x async for x in s]
-    assert items == []
+        assert items == []
 
 
 @pytest.mark.asyncio
