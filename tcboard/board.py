@@ -524,7 +524,7 @@ class TCBoard(BaseModel[None]):
     def register_update_function(self, update_fn: UpdateCallable) -> None:
         self._call_after_update_fns.append(update_fn)
 
-    async def _post_update(self, make_dirty: bool = False) -> None:
+    async def _post_update(self, make_dirty: bool = True) -> None:
         if self._disable_updates:
             logger.debug("Not reacting to update, as updates are disabled")
             return

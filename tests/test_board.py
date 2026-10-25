@@ -902,11 +902,11 @@ async def test_post_update_is_suppressed_when_disabled(tcboard: TCBoard) -> None
     fn = AsyncMock()
     tcboard.register_update_function(fn)
     async with tcboard.disable_updates():
-        await tcboard._post_update(make_dirty=True)
+        await tcboard._post_update()
     fn.assert_not_awaited()
     assert tcboard.rev == 0
 
-    await tcboard._post_update(make_dirty=True)
+    await tcboard._post_update()
     fn.assert_awaited_once()
     assert tcboard.rev == 1
 
