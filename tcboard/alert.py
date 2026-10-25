@@ -1,16 +1,16 @@
 # needed < 3.14 so that annotations aren't evaluated
 from __future__ import annotations
 
+import hashlib
 import traceback
-import uuid
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Protocol, Self, cast
 
 from pydantic import (
-    UUID4,
     BaseModel,
     Field,
+    computed_field,
 )
 
 
@@ -20,13 +20,28 @@ class AlertClearCallback(Protocol):
 
 class Alert(BaseModel):
     text: str
-    id: UUID4 = Field(default_factory=uuid.uuid4)
     detail: str | None = None
     matchid: str | None = None
     deviceid: str | None = None
     timestamp: datetime | None = None
     traceback: str | None = Field(default=None, repr=False)
     cleared: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def id(self) -> str:
+        """The alert ID, derived from its content (not timestamp or cleared)."""
+        hash = hashlib.sha256()
+        for value in (
+            self.text,
+            self.detail,
+            self.matchid,
+            self.deviceid,
+            self.traceback,
+        ):
+            hash.update(b"\x00" if value is None else value.encode())
+            hash.update(b"\x1f")
+        return hash.hexdigest()
 
     def model_post_init(self, _: Any) -> None:
         if self.timestamp is None:

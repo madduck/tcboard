@@ -122,7 +122,7 @@ def test_alert_clear(apiclient: TestClient, clictx: CliContext) -> None:
 
 
 def test_alert_clear_not_found_maps_to_404(apiclient: TestClient) -> None:
-    alert_id = "3f2d7e3a-1b2c-4d5e-8f90-123456789abc"
+    alert_id = "3f2d7e3a1b2c4d5e8f901234567890abcdef1234567890abcdef1234567890ab"
     resp = apiclient.patch(f"/alert/clear/1/{alert_id}")
     assert resp.status_code == 404
     assert f"No alert with ID {alert_id} on court with ID 1" in resp.json()["detail"]

@@ -13,7 +13,6 @@ from fastapi import (
     Response,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import UUID4
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.status import HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 from tptools import Court
@@ -135,7 +134,7 @@ async def match_reset(
 @apiapp.patch("/alert/clear/{courtid}/{alertid}")
 async def alert_clear(
     courtid: Annotated[int, Path(title="The ID of the court of the alert to clear")],
-    alertid: Annotated[UUID4, Path(title="The ID of the alert to clear")],
+    alertid: Annotated[str, Path(title="The ID of the alert to clear")],
     board: Annotated[TCBoard, Depends(get_board)],
 ) -> Response:
     try:

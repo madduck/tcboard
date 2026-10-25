@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Any, Iterable, MutableMapping, Never, Protocol, cast
 
 from pydantic import (
-    UUID4,
     SerializerFunctionWrapHandler,
     ValidationError,
     ValidatorFunctionWrapHandler,
@@ -413,7 +412,7 @@ class TCBoard(BaseModel[None]):
             self._process_matchstate(ms)
             await self._post_update()
 
-    async def clear_alert(self, courtid: int, alertid: UUID4) -> None:
+    async def clear_alert(self, courtid: int, alertid: str) -> None:
         for alert in self.alerts_by_courtid[courtid]:
             if alert.cleared:
                 continue

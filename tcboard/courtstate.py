@@ -1,7 +1,6 @@
 import logging
 
 from pydantic import (
-    UUID4,
     BaseModel,
     SerializationInfo,
     computed_field,
@@ -52,7 +51,7 @@ class CourtState(
         )
 
     @property
-    def _alert_uuids(self) -> list[UUID4]:
+    def _alert_ids(self) -> list[str]:
         return [a.id for a in self.alerts if not a.cleared]
 
     __cmp_fields__ = ("court", "tick")
@@ -63,7 +62,7 @@ class CourtState(
         "finished",
         "tick",
         "batterylevels",
-        "_alert_uuids",
+        "_alert_ids",
     )
     __repr_fields__ = [
         "court?.name",

@@ -60,7 +60,7 @@ def test_serialising_only_current_is_reversed(
         assert d["match"]["id"] == ms.match.id
 
 
-def test_only_alert_uuids_affect_equality(court1: Court) -> None:
+def test_only_alert_ids_affect_equality(court1: Court) -> None:
     cs1 = CourtState(court=court1)
     cs2 = CourtState(court=court1)
     alert1 = Alert(text="alert1")
@@ -69,8 +69,8 @@ def test_only_alert_uuids_affect_equality(court1: Court) -> None:
     cs1.alerts = [alert1]
     cs2.alerts = [alert2]
 
-    assert cs1 == cs2
-
-    cs2.alerts = [Alert(text="alert1")]  # this generates a new UUID
-
     assert cs1 != cs2
+
+    cs2.alerts = [Alert(text="alert1")]  # same content generates the same ID
+
+    assert cs1 == cs2
